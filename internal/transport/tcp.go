@@ -7,8 +7,6 @@ import (
 	"io"
 	"log"
 	"net"
-
-	pkt "github.com/pyr33x/goqtt/internal/packet"
 )
 
 func (srv *TCPServer) Start(ctx context.Context) error {
@@ -62,20 +60,6 @@ func (srv *TCPServer) connect(ctx context.Context, conn net.Conn) {
 				return
 			}
 			buf = buf[:n]
-
-			packet, err := pkt.Parse(buf)
-			if err != nil {
-				log.Printf("Invalid packet: %v", err)
-				return
-			}
-
-			switch packet.Type {
-			case pkt.CONNECT:
-				log.Printf("Received %v packet from %s", packet.Type, conn.RemoteAddr())
-
-			default:
-				log.Printf("Received unsupported packet type: %d", packet.Type)
-			}
 		}
 	}
 }
