@@ -9,7 +9,7 @@ run:
 	@go run ./cmd/goqtt/main.go
 
 start:
-	@echo "🛠️  Starting..."
+	@echo "🛠️ Starting..."
 	@./bin/goqtt
 
 
