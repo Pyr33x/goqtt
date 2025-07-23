@@ -1,0 +1,4 @@
+name: "GoQTT"
+version: "1.0.0"
+server:
+  port: "1883"
