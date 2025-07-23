@@ -7,22 +7,9 @@ import (
 	"io"
 	"log"
 	"net"
-	"strings"
 
-	"github.com/pyr33x/goqtt/internal/broker"
+	pkt "github.com/pyr33x/goqtt/internal/packet"
 )
-
-type TCPServer struct {
-	addr   string
-	broker *broker.Broker
-}
-
-func New(addr string, broker *broker.Broker) *TCPServer {
-	return &TCPServer{
-		addr:   addr,
-		broker: broker,
-	}
-}
 
 func (srv *TCPServer) Start(ctx context.Context) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", srv.addr))
@@ -58,13 +45,14 @@ func (srv *TCPServer) connect(ctx context.Context, conn net.Conn) {
 
 	log.Printf("Client connected from %s\n", conn.RemoteAddr())
 
+	buf := make([]byte, 1024)
 	for {
 		select {
 		case <-ctx.Done():
 			log.Printf("Closing connection with %s due to server shutdown", conn.RemoteAddr())
 			return
 		default:
-			packet, err := reader.ReadBytes('\n')
+			n, err := reader.Read(buf)
 			if err == io.EOF {
 				log.Printf("Client %s disconnected", conn.RemoteAddr())
 				return
@@ -73,13 +61,21 @@ func (srv *TCPServer) connect(ctx context.Context, conn net.Conn) {
 				log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
 				return
 			}
+			buf = buf[:n]
 
-			srv.handlePacket(strings.TrimSpace(string(packet)), conn)
+			packet, err := pkt.Parse(buf)
+			if err != nil {
+				log.Printf("Invalid packet: %v", err)
+				return
+			}
+
+			switch packet.Type {
+			case pkt.CONNECT:
+				log.Printf("Received %v packet from %s", packet.Type, conn.RemoteAddr())
+
+			default:
+				log.Printf("Received unsupported packet type: %d", packet.Type)
+			}
 		}
 	}
-}
-
-func (srv *TCPServer) handlePacket(packet string, conn net.Conn) {
-	log.Printf("Received: %s", packet)
-	fmt.Fprintf(conn, "ACK: %s", packet)
 }
