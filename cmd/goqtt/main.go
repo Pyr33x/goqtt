@@ -29,7 +29,7 @@ func gracefulShutdown(cancel context.CancelFunc, done chan struct{}) {
 
 func main() {
 	done := make(chan struct{})
-	port := envy.GetString("PORT", "1337")
+	port := envy.GetString("PORT", "1883")
 
 	ctx, cancel := context.WithCancel(context.Background())
 
