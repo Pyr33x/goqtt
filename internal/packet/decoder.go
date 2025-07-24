@@ -3,7 +3,7 @@ package packet
 import (
 	"encoding/binary"
 
-	"github.com/pyr33x/goqtt/utilities/er"
+	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 func DecodeString(b []byte) (string, int, error) {

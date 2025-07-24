@@ -1,6 +1,6 @@
 package packet
 
-import "github.com/pyr33x/goqtt/utilities/er"
+import "github.com/pyr33x/goqtt/pkg/er"
 
 // Parse determines the packet type and returns the appropriate parsed packet
 func Parse(raw []byte) (*ParsedPacket, error) {

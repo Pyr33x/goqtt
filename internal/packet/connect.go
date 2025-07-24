@@ -3,7 +3,7 @@ package packet
 import (
 	"encoding/binary"
 
-	"github.com/pyr33x/goqtt/utilities/er"
+	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 type ConnectPacket struct {
