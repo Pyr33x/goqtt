@@ -19,9 +19,11 @@ type ConnectPacket struct {
 	KeepAlive     uint16
 
 	// Payload
-	ClientID string
-	Username string
-	Password string
+	ClientID    string
+	WillTopic   string // (if Will flag is set)
+	WillMessage string // (if Will flag is set)
+	Username    string // (if Username flag is set)
+	Password    string // (if Password flag is set)
 
 	// Raw
 	Raw []byte
