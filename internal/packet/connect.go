@@ -6,6 +6,15 @@ import (
 	"github.com/pyr33x/goqtt/utilities/er"
 )
 
+type ConnectPacket struct {
+	ProtocolName  string
+	ProtocolLevel byte
+	CleanStart    bool
+	KeepAlive     uint16
+	ClientID      string
+	Raw           []byte
+}
+
 func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	if len(raw) < 2 {
 		return nil, &er.Err{
@@ -53,7 +62,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		}
 	}
 	flags := raw[index]
-	cleanSession := (flags & 0x02) > 0
+	cleanStart := (flags & 0x02) > 0
 	index++
 
 	if index+2 > len(raw) {
@@ -77,7 +86,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	return &ConnectPacket{
 		ProtocolName:  protoName,
 		ProtocolLevel: protoLevel,
-		CleanSession:  cleanSession,
+		CleanStart:    cleanStart,
 		KeepAlive:     keepAlive,
 		ClientID:      clientId,
 		Raw:           raw,
