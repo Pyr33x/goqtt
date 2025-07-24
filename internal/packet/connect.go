@@ -7,88 +7,101 @@ import (
 )
 
 type ConnectPacket struct {
+	// Variable Header
 	ProtocolName  string
 	ProtocolLevel byte
+	UsernameFlag  bool
+	PasswordFlag  bool
+	WillRetain    bool
+	WillQos       byte
+	WillFlag      bool
 	CleanStart    bool
 	KeepAlive     uint16
-	ClientID      string
-	Raw           []byte
+
+	// Payload
+	ClientID string
+	Username string
+	Password string
+
+	// Raw
+	Raw []byte
 }
 
 func ParseConnect(raw []byte) (*ConnectPacket, error) {
-	if len(raw) < 2 {
+	if len(raw) < 10 {
 		return nil, &er.Err{
 			Context: "Connect",
 			Message: er.ErrInvalidConnPacket,
 		}
 	}
 
-	if raw[0] != byte(CONNECT) {
+	if PacketType((raw[0] & 0xF0)) != CONNECT {
 		return nil, &er.Err{
 			Context: "Connect",
-			Message: er.ErrInvalidPacketType,
+			Message: er.ErrInvalidConnPacket,
 		}
 	}
 
-	remainingLength := int(raw[1])
-	if remainingLength != len(raw)-2 {
+	packet := &ConnectPacket{Raw: raw}
+	offset := 2 // Skip fixed header (packet type + remaining length)
+
+	if offset+2 > len(raw) {
 		return nil, &er.Err{
 			Context: "Connect",
-			Message: er.ErrRemainingLenMissmatch,
+			Message: er.ErrInvalidConnPacket,
 		}
 	}
 
-	index := 2
+	// Protocol Name Length (skip fixed header + 2) = Protocol
+	protoNameLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+	offset += 2
 
-	protoName, n, err := DecodeString(raw[index:])
-	if err != nil {
-		return nil, err
-	}
-	index += n
-
-	if index >= len(raw) {
+	if offset+int(protoNameLen) > len(raw) {
 		return nil, &er.Err{
 			Context: "Connect",
-			Message: er.ErrMissProtoLevel,
+			Message: er.ErrInvalidConnPacket,
 		}
 	}
-	protoLevel := raw[index]
-	index++
 
-	if index >= len(raw) {
+	packet.ProtocolName = string(raw[offset : offset+int(protoNameLen)])
+	offset += int(protoNameLen)
+
+	// Parse Protocol Level (strict to 4 = MQTT 3.1.1)
+	if offset >= len(raw) {
 		return nil, &er.Err{
 			Context: "Connect",
-			Message: er.ErrMissConnectFlags,
+			Message: er.ErrInvalidConnPacket,
 		}
 	}
-	flags := raw[index]
-	cleanStart := (flags & 0x02) > 0
-	index++
+	packet.ProtocolLevel = raw[offset]
+	offset++
 
-	if index+2 > len(raw) {
+	// Parse Connect Flags
+	if offset >= len(raw) {
 		return nil, &er.Err{
 			Context: "Connect",
-			Message: er.ErrMissKeepAlive,
+			Message: er.ErrInvalidConnPacket,
 		}
 	}
-	keepAlive := binary.BigEndian.Uint16(raw[index : index+2])
-	index += 2
+	connectFlags := raw[offset]
+	offset++
 
-	clientId, n, err := DecodeString(raw[index:])
-	if err != nil {
+	packet.UsernameFlag = (connectFlags & 0x80) != 0 // bit 7
+	packet.PasswordFlag = (connectFlags & 0x40) != 0 // bit 6
+	packet.WillRetain = (connectFlags & 0x20) != 0   // bit 5
+	packet.WillQos = (connectFlags & 0x18) >> 3      // bit 4-3
+	packet.WillFlag = (connectFlags & 0x04) != 0     // bit 2
+	packet.CleanStart = (connectFlags & 0x02) != 0   // bit 1
+
+	// Parse Keep Alive
+	if offset+2 > len(raw) {
 		return nil, &er.Err{
 			Context: "Connect",
-			Message: err,
+			Message: er.ErrInvalidConnPacket,
 		}
 	}
-	index += n
+	packet.KeepAlive = binary.BigEndian.Uint16(raw[offset : offset+2])
+	offset += 2
 
-	return &ConnectPacket{
-		ProtocolName:  protoName,
-		ProtocolLevel: protoLevel,
-		CleanStart:    cleanStart,
-		KeepAlive:     keepAlive,
-		ClientID:      clientId,
-		Raw:           raw,
-	}, nil
+	return packet, nil
 }
