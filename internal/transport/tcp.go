@@ -7,7 +7,22 @@ import (
 	"io"
 	"log"
 	"net"
+
+	"github.com/pyr33x/goqtt/internal/broker"
 )
+
+type TCPServer struct {
+	addr     string
+	listener net.Listener
+	broker   *broker.Broker
+}
+
+func New(addr string, broker *broker.Broker) *TCPServer {
+	return &TCPServer{
+		addr:   addr,
+		broker: broker,
+	}
+}
 
 func (srv *TCPServer) Start(ctx context.Context) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", srv.addr))
