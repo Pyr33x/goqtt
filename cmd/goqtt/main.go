@@ -31,7 +31,7 @@ func gracefulShutdown(cancel context.CancelFunc, done chan struct{}) {
 	<-ctx.Done()
 	log.Println("Graceful shutdown has triggered...")
 
-	cancel()
+	defer cancel()
 	time.Sleep(1 * time.Second)
 
 	close(done)
@@ -41,9 +41,13 @@ func main() {
 	done := make(chan struct{}, 1)
 	var cfg Config
 
-	data, _ := os.ReadFile("config.yml")
+	config, err := os.ReadFile("config.yml")
+	if err != nil {
+		log.Panicln("failed to read config from yaml file")
+		return
+	}
 
-	err := yaml.Unmarshal([]byte(data), &cfg)
+	err = yaml.Unmarshal([]byte(config), &cfg)
 	if err != nil {
 		log.Panicf("Failed to unmarshal yaml config: %v\n", err)
 	}

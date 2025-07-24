@@ -1,10 +1,15 @@
 package transport
 
-import "github.com/pyr33x/goqtt/internal/broker"
+import (
+	"net"
+
+	"github.com/pyr33x/goqtt/internal/broker"
+)
 
 type TCPServer struct {
-	addr   string
-	broker *broker.Broker
+	addr     string
+	listener net.Listener
+	broker   *broker.Broker
 }
 
 func New(addr string, broker *broker.Broker) *TCPServer {

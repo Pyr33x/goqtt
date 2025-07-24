@@ -14,52 +14,44 @@ func (srv *TCPServer) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	srv.listener = listener
+	go srv.accept(ctx)
+	return nil
+}
 
-	go func() {
-		<-ctx.Done()
-		listener.Close()
-	}()
-
+func (srv *TCPServer) accept(ctx context.Context) {
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				log.Println("TCP server shutting down...")
-				return nil
-			default:
-				log.Printf("failed to accept connection: %v", err)
+		select {
+		case <-ctx.Done():
+			log.Println("shutting down accept...")
+			return
+		default:
+			conn, err := srv.listener.Accept()
+			if err != nil {
+				log.Println("accept error: ", err)
 				continue
 			}
+			go srv.read(conn)
 		}
-		go srv.connect(ctx, conn)
 	}
 }
 
-func (srv *TCPServer) connect(ctx context.Context, conn net.Conn) {
+func (srv *TCPServer) read(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
-
 	log.Printf("Client connected from %s\n", conn.RemoteAddr())
 
 	buf := make([]byte, 1024)
 	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("Closing connection with %s due to server shutdown", conn.RemoteAddr())
+		n, err := reader.Read(buf)
+		if err == io.EOF {
+			log.Printf("Client %s disconnected", conn.RemoteAddr())
 			return
-		default:
-			n, err := reader.Read(buf)
-			if err == io.EOF {
-				log.Printf("Client %s disconnected", conn.RemoteAddr())
-				return
-			}
-			if err != nil {
-				log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
-				return
-			}
-			buf = buf[:n]
 		}
+		if err != nil {
+			log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
+			return
+		}
+		buf = buf[:n]
 	}
 }
