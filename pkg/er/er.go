@@ -17,7 +17,7 @@ var (
 	ErrReadProtoName         = errors.New("failed to read protocol name")
 	ErrMissProtoVer          = errors.New("missing protocol version")
 	ErrMissProtoLevel        = errors.New("missing protocol level")
-	ErrMissConnectFlags      = errors.New("missing connect flags")
+	ErrMissConnFlags         = errors.New("missing connect flags")
 	ErrMissKeepAlive         = errors.New("missing Keep Alive")
 	ErrReadClientID          = errors.New("failed to read client ID")
 	ErrInvalidConnPacket     = errors.New("connect packet is invalid")
