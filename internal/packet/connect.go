@@ -129,7 +129,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 			// Must explicitly require clean session
 			return nil, &er.Err{
 				Context: "Connect, ClientID",
-				Message: er.ErrClientMustSetCleanSession,
+				Message: er.ErrIdentifierRejected,
 			}
 		} else {
 			// Bubble it up
