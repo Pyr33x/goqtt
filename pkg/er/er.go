@@ -32,6 +32,13 @@ var (
 	ErrClientIDLengthExceed         = errors.New("client id exceeds 23 bytes")
 	ErrInvalidCharsClientID         = errors.New("client id contains invaid characters")
 
+	// Protocol
+	ErrUnsupportedProtocolLevel = errors.New("protocol level is not supported")
+	ErrUnsupportedProtocolName  = errors.New("protocol name is not supported")
+
+	// ConnectFlags
+	ErrInvalidWillQos = errors.New("willqos level is invalid")
+
 	// Client
 	ErrClientMustSetCleanSession = errors.New("client must set clean session to 1")
 )
