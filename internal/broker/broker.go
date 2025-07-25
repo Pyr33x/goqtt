@@ -1,7 +1,17 @@
 package broker
 
-type Broker struct{}
+import (
+	"sync"
+	"sync/atomic"
+)
+
+type Broker struct {
+	session atomic.Value
+	rwmu    sync.RWMutex
+}
 
 func New() *Broker {
-	return &Broker{}
+	b := &Broker{}
+	b.session.Store(make(sessionMap)) // Initialize empty session map
+	return b
 }
