@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/pyr33x/goqtt/pkg/er"
 )
 
@@ -123,8 +124,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	if cErr != nil {
 		if errors.Is(cErr, er.ErrEmptyClientID) {
 			// Assign a default client ID
-			// TODO: assign unique identifier
-			packet.ClientID = "assigned"
+			packet.ClientID = uuid.NewString()
 		} else if errors.Is(cErr, er.ErrEmptyAndCleanSessionClientID) {
 			// Must explicitly require clean session
 			return nil, &er.Err{
