@@ -1,6 +1,6 @@
 package packet
 
-// MQTT Packet Types
+// MQTT Packet Type
 type PacketType byte
 
 const (
