@@ -201,7 +201,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	if !packet.UsernameFlag && packet.PasswordFlag {
 		return nil, &er.Err{
 			Context: "Connect, UsernameFlag + PasswordFlag",
-			Message: er.ErrInvalidConnPacket,
+			Message: er.ErrPasswordWithoutUsername,
 		}
 	}
 
