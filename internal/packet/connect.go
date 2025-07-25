@@ -2,6 +2,8 @@ package packet
 
 import (
 	"encoding/binary"
+	"errors"
+	"strings"
 
 	"github.com/pyr33x/goqtt/pkg/er"
 )
@@ -105,5 +107,72 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	packet.KeepAlive = binary.BigEndian.Uint16(raw[offset : offset+2])
 	offset += 2
 
+	clientIDLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+	offset += 2
+
+	if offset+int(clientIDLen) > len(raw) {
+		return nil, &er.Err{
+			Context: "Connect",
+			Message: er.ErrInvalidConnPacket,
+		}
+	}
+	packet.ClientID = string(raw[offset : offset+int(clientIDLen)])
+
+	cErr := packet.ValidateClientID()
+	if cErr != nil {
+		if errors.Is(cErr, er.ErrEmptyClientID) {
+			// Assign a default client ID
+			// TODO: assign unique identifier
+			packet.ClientID = "assigned"
+		} else if errors.Is(cErr, er.ErrEmptyAndCleanSessionClientID) {
+			// Must explicitly require clean session
+			return nil, &er.Err{
+				Context: "Connect, ClientID",
+				Message: er.ErrClientMustSetCleanSession,
+			}
+		} else {
+			// Bubble it up
+			return nil, cErr
+		}
+	}
+
 	return packet, nil
+}
+
+func (c *ConnectPacket) ValidateClientID() error {
+	// Check if ClientID is empty (zero bytes)
+	if len(c.ClientID) == 0 {
+		// Empty ClientID is allowed only if CleanSession is set to 1
+		if !c.CleanSession {
+			return &er.Err{
+				Context: "Connect, ClientID",
+				Message: er.ErrEmptyAndCleanSessionClientID,
+			}
+		}
+		return &er.Err{
+			Context: "Connect, ClientID",
+			Message: er.ErrEmptyClientID,
+		}
+	}
+
+	// Check ClientID length (1-23 UTF-8 encoded bytes)
+	if len(c.ClientID) > 23 {
+		return &er.Err{
+			Context: "Connect, ClientID",
+			Message: er.ErrClientIDLengthExceed,
+		}
+	}
+
+	// Check allowed characters: 0-9, a-z, A-Z
+	allowedChars := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	for _, char := range c.ClientID {
+		if !strings.ContainsRune(allowedChars, char) {
+			return &er.Err{
+				Context: "Connect, ClientID",
+				Message: er.ErrInvalidCharsClientID,
+			}
+		}
+	}
+
+	return nil
 }
