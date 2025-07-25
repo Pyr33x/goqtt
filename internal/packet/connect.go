@@ -71,6 +71,14 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	packet.ProtocolName = string(raw[offset : offset+int(protoNameLen)])
 	offset += int(protoNameLen)
 
+	// Enforce "MQTT" as ProtocolName (strict, case-sensitive)
+	if packet.ProtocolName != "MQTT" {
+		return nil, &er.Err{
+			Context: "Connect, ProtocolName",
+			Message: er.ErrUnsupportedProtocolName,
+		}
+	}
+
 	// Parse Protocol Level (strict to 4 = MQTT 3.1.1)
 	if offset >= len(raw) {
 		return nil, &er.Err{
@@ -80,6 +88,12 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	}
 	packet.ProtocolLevel = raw[offset]
 	offset++
+	if packet.ProtocolLevel != 4 {
+		return nil, &er.Err{
+			Context: "Connect, ProtocolLevel",
+			Message: er.ErrUnsupportedProtocolLevel,
+		}
+	}
 
 	// Parse Connect Flags
 	if offset >= len(raw) {
@@ -97,6 +111,14 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	packet.WillQos = (connectFlags & 0x18) >> 3      // bit 4-3
 	packet.WillFlag = (connectFlags & 0x04) != 0     // bit 2
 	packet.CleanSession = (connectFlags & 0x02) != 0 // bit 1
+
+	// Validate WillQos if WillFlag is set
+	if packet.WillFlag && packet.WillQos > 2 {
+		return nil, &er.Err{
+			Context: "Connect, WillQos",
+			Message: er.ErrInvalidWillQos,
+		}
+	}
 
 	// Parse Keep Alive
 	if offset+2 > len(raw) {
@@ -123,10 +145,11 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	cErr := packet.ValidateClientID()
 	if cErr != nil {
 		if errors.Is(cErr, er.ErrEmptyClientID) {
-			// Assign a default client ID
+			// If Client ID is not set from client
+			// We assign a uuid to the Client ID from the server
 			packet.ClientID = uuid.NewString()
 		} else if errors.Is(cErr, er.ErrEmptyAndCleanSessionClientID) {
-			// Must explicitly require clean session
+			// Client must set clean session to 1
 			return nil, &er.Err{
 				Context: "Connect, ClientID",
 				Message: er.ErrIdentifierRejected,
@@ -145,10 +168,8 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 				Message: er.ErrInvalidConnPacket,
 			}
 		}
-
 		willTopicLen := binary.BigEndian.Uint16(raw[offset : offset+2])
 		offset += 2
-
 		if offset+int(willTopicLen) > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, WillTopic",
@@ -157,7 +178,6 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		}
 		packet.WillTopic = string(raw[offset : offset+int(willTopicLen)])
 		offset += int(willTopicLen)
-
 		if offset+2 > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, WillTopic",
@@ -167,7 +187,6 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 
 		willMessageLen := binary.BigEndian.Uint16(raw[offset : offset+2])
 		offset += 2
-
 		if offset+int(willMessageLen) > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, WillMessage",
@@ -176,6 +195,14 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		}
 		packet.WillMessage = string(raw[offset : offset+int(willMessageLen)])
 		offset += int(willMessageLen)
+	}
+
+	// Username/Password dependency check
+	if !packet.UsernameFlag && packet.PasswordFlag {
+		return nil, &er.Err{
+			Context: "Connect, UsernameFlag + PasswordFlag",
+			Message: er.ErrInvalidConnPacket,
+		}
 	}
 
 	// Parse Username if UsernameFlag is set
