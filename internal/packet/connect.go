@@ -117,6 +117,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		}
 	}
 	packet.ClientID = string(raw[offset : offset+int(clientIDLen)])
+	offset += int(clientIDLen)
 
 	cErr := packet.ValidateClientID()
 	if cErr != nil {
@@ -134,6 +135,91 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 			// Bubble it up
 			return nil, cErr
 		}
+	}
+
+	// Parse WillTopic & WillMessage if Will is WillFlag is set
+	if packet.WillFlag {
+		if offset+2 > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, WillFlag",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+
+		willTopicLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+		offset += 2
+
+		if offset+int(willTopicLen) > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, WillTopic",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+		packet.WillTopic = string(raw[offset : offset+int(willTopicLen)])
+		offset += int(willTopicLen)
+
+		if offset+2 > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, WillTopic",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+
+		willMessageLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+		offset += 2
+
+		if offset+int(willMessageLen) > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, WillMessage",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+		packet.WillMessage = string(raw[offset : offset+int(willMessageLen)])
+		offset += int(willMessageLen)
+	}
+
+	// Parse Username if UsernameFlag is set
+	if packet.UsernameFlag {
+		if offset+2 > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, UsernameFlag",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+
+		usernameLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+		offset += 2
+
+		if offset+int(usernameLen) > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, Username",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+		packet.Username = string(raw[offset : offset+int(usernameLen)])
+		offset += int(usernameLen)
+	}
+
+	// Parse Password if PasswordFlag is set
+	if packet.PasswordFlag {
+		if offset+2 > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, PasswordFlag",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+
+		passwordLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+		offset += 2
+
+		if offset+int(passwordLen) > len(raw) {
+			return nil, &er.Err{
+				Context: "Connect, Password",
+				Message: er.ErrInvalidConnPacket,
+			}
+		}
+		packet.Password = string(raw[offset : offset+int(passwordLen)])
+		offset += int(passwordLen)
 	}
 
 	return packet, nil
