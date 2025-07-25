@@ -15,7 +15,7 @@ type ConnectPacket struct {
 	WillRetain    bool
 	WillQos       byte
 	WillFlag      bool
-	CleanStart    bool
+	CleanSession  bool
 	KeepAlive     uint16
 
 	// Payload
@@ -93,7 +93,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	packet.WillRetain = (connectFlags & 0x20) != 0   // bit 5
 	packet.WillQos = (connectFlags & 0x18) >> 3      // bit 4-3
 	packet.WillFlag = (connectFlags & 0x04) != 0     // bit 2
-	packet.CleanStart = (connectFlags & 0x02) != 0   // bit 1
+	packet.CleanSession = (connectFlags & 0x02) != 0 // bit 1
 
 	// Parse Keep Alive
 	if offset+2 > len(raw) {
