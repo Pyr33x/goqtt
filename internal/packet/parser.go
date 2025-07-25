@@ -6,7 +6,7 @@ import "github.com/pyr33x/goqtt/pkg/er"
 func Parse(raw []byte) (*ParsedPacket, error) {
 	if len(raw) < 1 {
 		return nil, &er.Err{
-			Context: "Parse",
+			Context: "Parser",
 			Message: er.ErrShortBuffer,
 		}
 	}
