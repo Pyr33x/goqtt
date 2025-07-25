@@ -58,18 +58,18 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	}
 
 	// Protocol Name Length (skip fixed header + 2) = Protocol
-	protoNameLen := binary.BigEndian.Uint16(raw[offset : offset+2])
+	protocolNameLen := binary.BigEndian.Uint16(raw[offset : offset+2])
 	offset += 2
 
-	if offset+int(protoNameLen) > len(raw) {
+	if offset+int(protocolNameLen) > len(raw) {
 		return nil, &er.Err{
 			Context: "Connect",
 			Message: er.ErrInvalidConnPacket,
 		}
 	}
 
-	packet.ProtocolName = string(raw[offset : offset+int(protoNameLen)])
-	offset += int(protoNameLen)
+	packet.ProtocolName = string(raw[offset : offset+int(protocolNameLen)])
+	offset += int(protocolNameLen)
 
 	// Enforce "MQTT" as ProtocolName (strict, case-sensitive)
 	if packet.ProtocolName != "MQTT" {
