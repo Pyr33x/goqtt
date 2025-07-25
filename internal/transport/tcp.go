@@ -17,10 +17,10 @@ type TCPServer struct {
 	broker   *broker.Broker
 }
 
-func New(addr string, broker *broker.Broker) *TCPServer {
+func New(addr string) *TCPServer {
 	return &TCPServer{
 		addr:   addr,
-		broker: broker,
+		broker: broker.New(),
 	}
 }
 

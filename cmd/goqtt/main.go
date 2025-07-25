@@ -10,7 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/pyr33x/goqtt/internal/broker"
 	"github.com/pyr33x/goqtt/internal/transport"
 )
 
@@ -54,8 +53,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	broker := broker.New()
-	srv := transport.New(cfg.Server.Port, broker)
+	srv := transport.New(cfg.Server.Port)
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
