@@ -29,7 +29,7 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 
 	default:
 		return nil, &er.Err{
-			Context: "Parse",
+			Context: "Parser",
 			Message: er.ErrInvalidPacketType,
 		}
 	}
