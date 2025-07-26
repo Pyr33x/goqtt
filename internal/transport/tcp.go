@@ -3,24 +3,32 @@ package transport
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
+	"sync/atomic"
 
 	"github.com/pyr33x/goqtt/internal/broker"
+	pkt "github.com/pyr33x/goqtt/internal/packet"
+	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 type TCPServer struct {
-	addr     string
-	listener net.Listener
-	broker   *broker.Broker
+	addr               string
+	listener           net.Listener
+	broker             *broker.Broker
+	isShuttingdown     atomic.Bool
+	maxConnections     int
+	currentConnections atomic.Int32
 }
 
 func New(addr string) *TCPServer {
 	return &TCPServer{
-		addr:   addr,
-		broker: broker.New(),
+		addr:           addr,
+		broker:         broker.New(),
+		maxConnections: 1000,
 	}
 }
 
@@ -34,6 +42,14 @@ func (srv *TCPServer) Start(ctx context.Context) error {
 	return nil
 }
 
+func (srv *TCPServer) Stop() error {
+	srv.isShuttingdown.Store(true)
+	if srv.listener != nil {
+		return srv.listener.Close()
+	}
+	return nil
+}
+
 func (srv *TCPServer) accept(ctx context.Context) {
 	for {
 		select {
@@ -43,20 +59,55 @@ func (srv *TCPServer) accept(ctx context.Context) {
 		default:
 			conn, err := srv.listener.Accept()
 			if err != nil {
+				// Check if we're shutting down
+				if srv.isShuttingdown.Load() {
+					return
+				}
 				log.Println("accept error: ", err)
 				continue
 			}
-			go srv.read(conn)
+			go srv.handleConnection(conn)
 		}
 	}
 }
 
-func (srv *TCPServer) read(conn net.Conn) {
-	defer conn.Close()
-	reader := bufio.NewReader(conn)
-	log.Printf("Client connected from %s\n", conn.RemoteAddr())
+func (srv *TCPServer) checkServerAvailability() string {
+	// Check if server is shutting down
+	if srv.isShuttingdown.Load() {
+		return "server is shutting down"
+	}
 
+	// Check connection limits (resource exhaustion)
+	if srv.currentConnections.Load() >= int32(srv.maxConnections) {
+		return "maximum connections exceeded"
+	}
+
+	return "" // Server is available
+}
+
+func (srv *TCPServer) handleConnection(conn net.Conn) {
+	defer func() {
+		conn.Close()
+		srv.currentConnections.Add(-1)
+		log.Printf("Connection from %s closed", conn.RemoteAddr())
+	}()
+
+	// Check server availability BEFORE processing any packets
+	if unavailableReason := srv.checkServerAvailability(); unavailableReason != "" {
+		ack := pkt.NewConnAck(false, pkt.ServerUnavailable)
+		conn.Write(ack)
+		conn.Close()
+		return
+	}
+
+	srv.currentConnections.Add(1)
+	log.Printf("Client connected from %s (connections: %d/%d)",
+		conn.RemoteAddr(), srv.currentConnections.Load(), srv.maxConnections)
+
+	reader := bufio.NewReader(conn)
 	buf := make([]byte, 1024)
+	sessionEstablished := false
+
 	for {
 		n, err := reader.Read(buf)
 		if err == io.EOF {
@@ -67,6 +118,96 @@ func (srv *TCPServer) read(conn net.Conn) {
 			log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
 			return
 		}
-		buf = buf[:n]
+
+		raw := buf[:n]
+		packet, err := pkt.Parse(raw)
+		if err != nil {
+			log.Printf("Parse error from %s: %v", conn.RemoteAddr(), err)
+
+			var returnCode byte
+			switch {
+			case errors.Is(err, er.ErrUnsupportedProtocolLevel) || errors.Is(err, er.ErrUnsupportedProtocolName):
+				returnCode = pkt.UnacceptableProtocolVersion
+			case errors.Is(err, er.ErrInvalidCharsClientID) || errors.Is(err, er.ErrClientIDLengthExceed) || errors.Is(err, er.ErrIdentifierRejected):
+				returnCode = pkt.IdentifierRejected
+			case errors.Is(err, er.ErrPasswordWithoutUsername) || errors.Is(err, er.ErrMalformedUsernameField) || errors.Is(err, er.ErrMalformedPasswordField):
+				returnCode = pkt.BadUsernameOrPassword
+			}
+
+			ack := pkt.NewConnAck(false, returnCode)
+			conn.Write(ack)
+			conn.Close()
+
+			return
+		}
+
+		// Handle first packet - must be CONNECT
+		if !sessionEstablished {
+			if !packet.IsConnect() {
+				log.Printf("Expected CONNECT packet from %s, got packet type %v", conn.RemoteAddr(), packet.Type)
+				ack := pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion)
+				conn.Write(ack)
+				conn.Close()
+				return
+			}
+
+			session := packet.GetConnect()
+			if session == nil {
+				log.Printf("Failed to get CONNECT data from %s", conn.RemoteAddr())
+				ack := pkt.NewConnAck(false, pkt.ServerUnavailable)
+				conn.Write(ack)
+				conn.Close()
+				return
+			}
+
+			// Check if session already exists (for session present flag)
+			_, sessionPresent := srv.broker.Get(session.ClientID)
+
+			// Create/update session
+			sessionStore := &broker.Session{
+				ClientID:     session.ClientID,
+				CleanSession: session.CleanSession,
+				KeepAlive:    session.KeepAlive,
+			}
+
+			srv.broker.Store(session.ClientID, sessionStore)
+
+			// Send successful CONNACK with session present flag
+			ack := pkt.NewConnAck(sessionPresent && !session.CleanSession, pkt.ConnectionAccepted)
+			conn.Write(ack)
+
+			sessionEstablished = true
+			log.Printf("CONNECT Packet:\n"+
+				"  ProtocolName: %s\n"+
+				"  ProtocolLevel: %d\n"+
+				"  UsernameFlag: %t\n"+
+				"  PasswordFlag: %t\n"+
+				"  WillRetain: %t\n"+
+				"  WillQos: %d\n"+
+				"  WillFlag: %t\n"+
+				"  CleanSession: %t\n"+
+				"  KeepAlive: %d\n"+
+				"  ClientID: %s\n"+
+				"  WillTopic: %s\n"+
+				"  WillMessage: %s\n"+
+				"  Username: %s\n"+
+				"  Password: %s\n",
+				session.ProtocolName,
+				session.ProtocolLevel,
+				session.UsernameFlag,
+				session.PasswordFlag,
+				session.WillRetain,
+				session.WillQos,
+				session.WillFlag,
+				session.CleanSession,
+				session.KeepAlive,
+				session.ClientID,
+				session.WillTopic,
+				session.WillMessage,
+				session.Username,
+				session.Password,
+			)
+			continue
+		}
 	}
 }
