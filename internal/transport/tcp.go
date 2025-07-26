@@ -161,7 +161,19 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			}
 
 			// Check if session already exists (for session present flag)
-			_, sessionPresent := srv.broker.Get(session.ClientID)
+			_, sessionExists := srv.broker.Get(session.ClientID)
+
+			// Determine session present flag
+			sessionPresent := false
+			if session.CleanSession && sessionExists {
+				log.Printf("Clean session requested for Client ID '%s', deleting existing session", session.ClientID)
+				srv.broker.Delete(session.ClientID)
+			}
+
+			if !session.CleanSession && sessionExists {
+				log.Printf("Restoring existing persistent session for Client ID '%s'", session.ClientID)
+				sessionPresent = true
+			}
 
 			// Create/update session
 			sessionStore := &broker.Session{
@@ -173,7 +185,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			srv.broker.Store(session.ClientID, sessionStore)
 
 			// Send successful CONNACK with session present flag
-			ack := pkt.NewConnAck(sessionPresent && !session.CleanSession, pkt.ConnectionAccepted)
+			ack := pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted)
 			conn.Write(ack)
 			sessionEstablished = true
 
