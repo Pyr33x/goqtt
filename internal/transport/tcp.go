@@ -175,38 +175,8 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			// Send successful CONNACK with session present flag
 			ack := pkt.NewConnAck(sessionPresent && !session.CleanSession, pkt.ConnectionAccepted)
 			conn.Write(ack)
-
 			sessionEstablished = true
-			log.Printf("CONNECT Packet:\n"+
-				"  ProtocolName: %s\n"+
-				"  ProtocolLevel: %d\n"+
-				"  UsernameFlag: %t\n"+
-				"  PasswordFlag: %t\n"+
-				"  WillRetain: %t\n"+
-				"  WillQos: %d\n"+
-				"  WillFlag: %t\n"+
-				"  CleanSession: %t\n"+
-				"  KeepAlive: %d\n"+
-				"  ClientID: %s\n"+
-				"  WillTopic: %s\n"+
-				"  WillMessage: %s\n"+
-				"  Username: %s\n"+
-				"  Password: %s\n",
-				session.ProtocolName,
-				session.ProtocolLevel,
-				session.UsernameFlag,
-				session.PasswordFlag,
-				session.WillRetain,
-				session.WillQos,
-				session.WillFlag,
-				session.CleanSession,
-				session.KeepAlive,
-				session.ClientID,
-				session.WillTopic,
-				session.WillMessage,
-				session.Username,
-				session.Password,
-			)
+
 			continue
 		}
 	}
