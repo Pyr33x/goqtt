@@ -23,6 +23,8 @@ var (
 	ErrUnsupportedProtocolName      = errors.New("protocol name is not supported")
 	ErrInvalidWillQos               = errors.New("willqos level is invalid")
 	ErrPasswordWithoutUsername      = errors.New("password flag set without username flag")
+	ErrMalformedUsernameField       = errors.New("malformed username field")
+	ErrMalformedPasswordField       = errors.New("malformed password field")
 )
 
 func (e *Err) Error() string {
