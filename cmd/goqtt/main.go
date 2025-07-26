@@ -10,7 +10,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/pyr33x/goqtt/internal/broker"
 	"github.com/pyr33x/goqtt/internal/transport"
 )
 
@@ -24,7 +23,7 @@ type Server struct {
 	Port string `yaml:"port"`
 }
 
-func gracefulShutdown(cancel context.CancelFunc, done chan struct{}) {
+func gracefulShutdown(tcpServer *transport.TCPServer, cancel context.CancelFunc, done chan struct{}) {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -32,6 +31,9 @@ func gracefulShutdown(cancel context.CancelFunc, done chan struct{}) {
 	log.Println("Graceful shutdown has triggered...")
 
 	defer cancel()
+	if err := tcpServer.Stop(); err != nil {
+		log.Println(err)
+	}
 	time.Sleep(1 * time.Second)
 
 	close(done)
@@ -54,8 +56,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	broker := broker.New()
-	srv := transport.New(cfg.Server.Port, broker)
+	srv := transport.New(cfg.Server.Port)
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
@@ -64,7 +65,7 @@ func main() {
 	}()
 	log.Printf("Server started listening at %s\n", cfg.Server.Port)
 
-	go gracefulShutdown(cancel, done)
+	go gracefulShutdown(srv, cancel, done)
 
 	<-done
 	log.Println("Graceful shutdown complete.")
