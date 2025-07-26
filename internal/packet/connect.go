@@ -210,7 +210,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		if offset+2 > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, UsernameFlag",
-				Message: er.ErrInvalidConnPacket,
+				Message: er.ErrMalformedUsernameField,
 			}
 		}
 
@@ -220,7 +220,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		if offset+int(usernameLen) > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, Username",
-				Message: er.ErrInvalidConnPacket,
+				Message: er.ErrMalformedUsernameField,
 			}
 		}
 		packet.Username = string(raw[offset : offset+int(usernameLen)])
@@ -232,7 +232,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		if offset+2 > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, PasswordFlag",
-				Message: er.ErrInvalidConnPacket,
+				Message: er.ErrMalformedPasswordField,
 			}
 		}
 
@@ -242,7 +242,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 		if offset+int(passwordLen) > len(raw) {
 			return nil, &er.Err{
 				Context: "Connect, Password",
-				Message: er.ErrInvalidConnPacket,
+				Message: er.ErrMalformedPasswordField,
 			}
 		}
 		packet.Password = string(raw[offset : offset+int(passwordLen)])
