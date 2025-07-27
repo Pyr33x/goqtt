@@ -25,6 +25,7 @@ var (
 	ErrPasswordWithoutUsername      = errors.New("password flag set without username flag")
 	ErrMalformedUsernameField       = errors.New("malformed username field")
 	ErrMalformedPasswordField       = errors.New("malformed password field")
+	ErrHashFailed                   = errors.New("failed to hash password")
 )
 
 func (e *Err) Error() string {
