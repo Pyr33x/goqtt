@@ -3,6 +3,7 @@ package transport
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net"
 	"sync/atomic"
 
+	"github.com/pyr33x/goqtt/internal/auth"
 	"github.com/pyr33x/goqtt/internal/broker"
 	pkt "github.com/pyr33x/goqtt/internal/packet"
 	"github.com/pyr33x/goqtt/pkg/er"
@@ -22,13 +24,15 @@ type TCPServer struct {
 	isShuttingdown     atomic.Bool
 	maxConnections     int
 	currentConnections atomic.Int32
+	authStore          *auth.Store
 }
 
-func New(addr string) *TCPServer {
+func New(addr string, db *sql.DB) *TCPServer {
 	return &TCPServer{
 		addr:           addr,
 		broker:         broker.New(),
 		maxConnections: 1000,
+		authStore:      auth.NewStore(db),
 	}
 }
 
@@ -158,6 +162,18 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				conn.Write(ack)
 				conn.Close()
 				return
+			}
+
+			// If username/password flags are true, then we do a validation over db
+			if session.UsernameFlag && session.PasswordFlag {
+				err := srv.authStore.Authenticate(session.Username, session.Password)
+				if err != nil {
+					log.Printf("Failed to authenticate %s: %v", session.ClientID, err)
+					ack := pkt.NewConnAck(false, pkt.BadUsernameOrPassword)
+					conn.Write(ack)
+					conn.Close()
+					return
+				}
 			}
 
 			// Check if session already exists (for session present flag)
