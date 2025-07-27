@@ -16,14 +16,6 @@ func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
 }
 
-func (s *Store) InitSchema() error {
-	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
-		username TEXT PRIMARY KEY,
-		password_hash TEXT NOT NULL
-	)`)
-	return err
-}
-
 func (s *Store) Authenticate(username, password string) error {
 	var hash string
 
@@ -38,7 +30,7 @@ func (s *Store) Authenticate(username, password string) error {
 		return err
 	}
 
-	if h.VerifyPasswd(hash, password) {
+	if !h.VerifyPasswd(hash, password) {
 		return &er.Err{
 			Context: "Auth",
 			Message: er.ErrInvalidPassword,
