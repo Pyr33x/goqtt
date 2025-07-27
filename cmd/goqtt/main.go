@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/pyr33x/goqtt/internal/transport"
@@ -54,9 +56,14 @@ func main() {
 		log.Panicf("Failed to unmarshal yaml config: %v\n", err)
 	}
 
+	db, err := sql.Open("sqlite3", "./store/store.db")
+	if err != nil {
+		log.Panicf("Failed to open sqlite db: %v", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
-	srv := transport.New(cfg.Server.Port)
+	srv := transport.New(cfg.Server.Port, db)
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
