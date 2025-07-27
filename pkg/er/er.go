@@ -26,6 +26,8 @@ var (
 	ErrMalformedUsernameField       = errors.New("malformed username field")
 	ErrMalformedPasswordField       = errors.New("malformed password field")
 	ErrHashFailed                   = errors.New("failed to hash password")
+	ErrUserNotFound                 = errors.New("user does not exist")
+	ErrInvalidPassword              = errors.New("password is invalid")
 )
 
 func (e *Err) Error() string {
