@@ -12,8 +12,16 @@ type Store struct {
 	db *sql.DB
 }
 
-func New(db *sql.DB) *Store {
+func NewStore(db *sql.DB) *Store {
 	return &Store{db: db}
+}
+
+func (s *Store) InitSchema() error {
+	_, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS users (
+		username TEXT PRIMARY KEY,
+		password_hash TEXT NOT NULL
+	)`)
+	return err
 }
 
 func (s *Store) Authenticate(username, password string) error {
@@ -27,6 +35,7 @@ func (s *Store) Authenticate(username, password string) error {
 				Message: er.ErrUserNotFound,
 			}
 		}
+		return err
 	}
 
 	if h.VerifyPasswd(hash, password) {
