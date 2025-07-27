@@ -246,7 +246,6 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 			}
 		}
 		packet.Password = string(raw[offset : offset+int(passwordLen)])
-		offset += int(passwordLen)
 	}
 
 	return packet, nil
