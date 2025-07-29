@@ -48,14 +48,6 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 		}
 	}
 
-	// MQTT 3.1.1: Validate reserved flag (bit 3 must be 0)
-	if (raw[0] & 0x04) != 0 {
-		return nil, &er.Err{
-			Context: "Publish, Reserved Flag",
-			Message: er.ErrInvalidReservedFlag,
-		}
-	}
-
 	packet := &PublishPacket{Raw: raw}
 
 	// Parse remaining length to find where variable header starts
