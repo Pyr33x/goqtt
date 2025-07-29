@@ -55,15 +55,17 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 	if err != nil {
 		return nil, err
 	}
-	offset += 1
 
-	// Validate total packet length
-	if len(raw) != 1+(offset-1)+remainingLength {
+	// offset is number of bytes used for remainingLength field
+	// Total expected length = 1 (fixed header) + offset + remainingLength
+	expectedLength := 1 + offset + remainingLength
+	if len(raw) != expectedLength {
 		return nil, &er.Err{
 			Context: "Publish, Packet Length",
 			Message: er.ErrInvalidPacketLength,
 		}
 	}
+	offset += 1
 
 	// Extract flags from fixed header
 	fixedHeader := raw[0]
@@ -162,10 +164,16 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 func parseRemainingLength(data []byte) (int, int, error) {
 	var length int
-	var multiplier int
+	multiplier := 1
 	var offset int
 
-	for offset < len(data) {
+	for {
+		if offset >= len(data) {
+			return 0, 0, &er.Err{
+				Context: "Publish, Remaining Length",
+				Message: er.ErrShortBuffer,
+			}
+		}
 		if offset >= 4 {
 			return 0, 0, &er.Err{
 				Context: "Publish, Remaining Length",
@@ -175,16 +183,16 @@ func parseRemainingLength(data []byte) (int, int, error) {
 
 		encodedByte := data[offset]
 		length += int(encodedByte&0x7F) * multiplier
+		multiplier *= 128
+
+		offset++
 
 		if (encodedByte & 0x80) == 0 {
 			break
 		}
-
-		multiplier *= 128
-		offset++
 	}
 
-	return length, offset + 1, nil
+	return length, offset, nil
 }
 
 func containsWildcards(topic string) bool {
