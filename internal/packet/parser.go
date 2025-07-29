@@ -40,6 +40,13 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Subscribe = subscribePacket
 		return result, nil
+	case UNSUBSCRIBE:
+		unsubscribePacket, err := ParseUnsubscribe(raw)
+		if err != nil {
+			return nil, err
+		}
+		result.Unsubscribe = unsubscribePacket
+		return result, nil
 	case DISCONNECT:
 		disconnectPacket, err := ParseDisconnect(raw)
 		if err != nil {
