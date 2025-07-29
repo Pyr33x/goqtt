@@ -21,12 +21,13 @@ const (
 )
 
 type ParsedPacket struct {
-	Type       PacketType
-	Raw        []byte
-	Connect    *ConnectPacket
-	Publish    *PublishPacket
-	Subscribe  *SubscribePacket
-	Disconnect *DisconnectPacket
+	Type        PacketType
+	Raw         []byte
+	Connect     *ConnectPacket
+	Publish     *PublishPacket
+	Subscribe   *SubscribePacket
+	Unsubscribe *UnsubscribePacket
+	Disconnect  *DisconnectPacket
 }
 
 // IsConnect returns true if this is a CONNECT packet
