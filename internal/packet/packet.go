@@ -6,11 +6,11 @@ type PacketType byte
 const (
 	CONNECT     PacketType = 0x10 // Client to Server - Connection request
 	CONNACK     PacketType = 0x20 // Server to Client - Connection acknowledgment
-	PUBLISH     PacketType = 0x30 // Client to Server or Server to Client - Publish message
-	PUBACK      PacketType = 0x40 // Client to Server or Server to Client - Publish acknowledgment
-	PUBREC      PacketType = 0x50 // Client to Server or Server to Client - Publish received
-	PUBREL      PacketType = 0x60 // Client to Server or Server to Client - Publish release
-	PUBCOMP     PacketType = 0x70 // Client to Server or Server to Client - Publish complete
+	PUBLISH     PacketType = 0x30 // Bidirectional - Publish message
+	PUBACK      PacketType = 0x40 // Bidirectional - Publish acknowledgment
+	PUBREC      PacketType = 0x50 // Bidirectional - Publish received
+	PUBREL      PacketType = 0x60 // Bidirectional - Publish release
+	PUBCOMP     PacketType = 0x70 // Bidirectional - Publish complete
 	SUBSCRIBE   PacketType = 0x80 // Client to Server - Subscribe request
 	SUBACK      PacketType = 0x90 // Server to Client - Subscribe acknowledgment
 	UNSUBSCRIBE PacketType = 0xA0 // Client to Server - Unsubscribe request
