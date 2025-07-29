@@ -9,7 +9,7 @@ const (
 	PUBLISH     PacketType = 0x30 // Bidirectional - Publish message
 	PUBACK      PacketType = 0x40 // Bidirectional - Publish acknowledgment
 	PUBREC      PacketType = 0x50 // Bidirectional - Publish received
-	PUBREL      PacketType = 0x60 // Bidirectional - Publish release
+	PUBREL      PacketType = 0x62 // Bidirectional - Publish release
 	PUBCOMP     PacketType = 0x70 // Bidirectional - Publish complete
 	SUBSCRIBE   PacketType = 0x80 // Client to Server - Subscribe request
 	SUBACK      PacketType = 0x90 // Server to Client - Subscribe acknowledgment
