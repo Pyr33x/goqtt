@@ -2,12 +2,14 @@ package broker
 
 import (
 	"maps"
+	"net"
 )
 
 type Session struct {
 	ClientID     string
 	CleanSession bool
 	KeepAlive    uint16
+	Conn         net.Conn
 }
 
 type sessionMap map[string]Session
