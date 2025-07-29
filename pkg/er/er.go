@@ -56,6 +56,8 @@ var (
 	ErrMultiLevelWildcardNotLast      = errors.New("multi-level wildcard # must be the last character")
 	ErrMultiLevelWildcardNotAlone     = errors.New("multi-level wildcard # must be preceded by / or be alone")
 	ErrSingleLevelWildcardNotAlone    = errors.New("single-level wildcard + must be between / characters or at boundaries")
+	ErrInvalidUnsubscribePacket       = errors.New("unsubscribe packet is invalid")
+	ErrInvalidUnsubscribeFlags        = errors.New("unsubscribe fixed header flags must be 0010")
 )
 
 func (e *Err) Error() string {
