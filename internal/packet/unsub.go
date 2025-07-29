@@ -23,7 +23,7 @@ func (p *UnsubackPacket) Encode() []byte {
 	var packet []byte
 
 	// Fixed header: UNSUBACK packet type (0xB0) with reserved flags (0x00)
-	packet = append(packet, 0xB0)
+	packet = append(packet, byte(UNSUBACK))
 
 	// Remaining length (always 2 for UNSUBACK)
 	packet = append(packet, byte(remainingLength))
