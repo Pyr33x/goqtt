@@ -218,6 +218,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				log.Printf("Error sending SUBACK to %s: %v", conn.RemoteAddr(), err)
 				return
 			}
+
 		case pkt.UNSUBSCRIBE:
 			unsuback := pkt.NewUnsubAck(packet.Unsubscribe)
 			unsubackBytes := unsuback.Encode()
@@ -227,6 +228,19 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				log.Printf("Error sending UNSUBACK to %s: %v", conn.RemoteAddr(), err)
 				return
 			}
+
+		case pkt.PINGREQ:
+			pingresp := pkt.CreatePingresp()
+			pingrespBytes := pingresp.Encode()
+
+			_, err = conn.Write(pingrespBytes)
+			if err != nil {
+				log.Printf("Error sending PINGRESP to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+
+			log.Printf("Sent PINGRESP to %s", conn.RemoteAddr())
+
 		case pkt.DISCONNECT:
 			log.Printf("Received DISCONNECT from %s", conn.RemoteAddr())
 			conn.Close()

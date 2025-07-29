@@ -12,7 +12,6 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 	}
 
 	packetType := PacketType(raw[0] & 0xF0)
-
 	result := &ParsedPacket{
 		Type: packetType,
 		Raw:  raw,
@@ -26,6 +25,7 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Connect = connectPacket
 		return result, nil
+
 	case PUBLISH:
 		publishPacket, err := ParsePublish(raw)
 		if err != nil {
@@ -33,6 +33,7 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Publish = publishPacket
 		return result, nil
+
 	case SUBSCRIBE:
 		subscribePacket, err := ParseSubscribe(raw)
 		if err != nil {
@@ -40,6 +41,7 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Subscribe = subscribePacket
 		return result, nil
+
 	case UNSUBSCRIBE:
 		unsubscribePacket, err := ParseUnsubscribe(raw)
 		if err != nil {
@@ -47,6 +49,15 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Unsubscribe = unsubscribePacket
 		return result, nil
+
+	case PINGREQ:
+		pingreqPacket, err := ParsePingreq(raw)
+		if err != nil {
+			return nil, err
+		}
+		result.Pingreq = pingreqPacket
+		return result, nil
+
 	case DISCONNECT:
 		disconnectPacket, err := ParseDisconnect(raw)
 		if err != nil {

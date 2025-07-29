@@ -27,6 +27,7 @@ type ParsedPacket struct {
 	Publish     *PublishPacket
 	Subscribe   *SubscribePacket
 	Unsubscribe *UnsubscribePacket
+	Pingreq     *PingreqPacket
 	Disconnect  *DisconnectPacket
 }
 
