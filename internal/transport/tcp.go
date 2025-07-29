@@ -27,6 +27,7 @@ type TCPServer struct {
 	authStore          *auth.Store
 }
 
+// New creates a new TCPServer instance
 func New(addr string, db *sql.DB) *TCPServer {
 	return &TCPServer{
 		addr:           addr,
@@ -36,6 +37,7 @@ func New(addr string, db *sql.DB) *TCPServer {
 	}
 }
 
+// Start begins accepting TCP connections
 func (srv *TCPServer) Start(ctx context.Context) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", srv.addr))
 	if err != nil {
@@ -46,6 +48,7 @@ func (srv *TCPServer) Start(ctx context.Context) error {
 	return nil
 }
 
+// Stop shuts down the listener gracefully
 func (srv *TCPServer) Stop() error {
 	srv.isShuttingdown.Store(true)
 	if srv.listener != nil {
@@ -63,7 +66,6 @@ func (srv *TCPServer) accept(ctx context.Context) {
 		default:
 			conn, err := srv.listener.Accept()
 			if err != nil {
-				// Check if we're shutting down
 				if srv.isShuttingdown.Load() {
 					return
 				}
@@ -75,18 +77,15 @@ func (srv *TCPServer) accept(ctx context.Context) {
 	}
 }
 
+// Checks if the server can accept a new connection
 func (srv *TCPServer) checkServerAvailability() string {
-	// Check if server is shutting down
 	if srv.isShuttingdown.Load() {
 		return "server is shutting down"
 	}
-
-	// Check connection limits (resource exhaustion)
 	if srv.currentConnections.Load() >= int32(srv.maxConnections) {
 		return "maximum connections exceeded"
 	}
-
-	return "" // Server is available
+	return ""
 }
 
 func (srv *TCPServer) handleConnection(conn net.Conn) {
@@ -96,8 +95,8 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 		log.Printf("Connection from %s closed", conn.RemoteAddr())
 	}()
 
-	// Check server availability BEFORE processing any packets
-	if unavailableReason := srv.checkServerAvailability(); unavailableReason != "" {
+	// Server load and shutdown checks
+	if reason := srv.checkServerAvailability(); reason != "" {
 		ack := pkt.NewConnAck(false, pkt.ServerUnavailable)
 		conn.Write(ack)
 		conn.Close()
@@ -105,132 +104,192 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 	}
 
 	srv.currentConnections.Add(1)
-	log.Printf("Client connected from %s (connections: %d/%d)",
-		conn.RemoteAddr(), srv.currentConnections.Load(), srv.maxConnections)
+	log.Printf("Client connected from %s (connections: %d/%d)", conn.RemoteAddr(), srv.currentConnections.Load(), srv.maxConnections)
 
 	reader := bufio.NewReader(conn)
-	buf := make([]byte, 1024)
 	sessionEstablished := false
 
 	for {
-		n, err := reader.Read(buf)
-		if err == io.EOF {
-			log.Printf("Client %s disconnected", conn.RemoteAddr())
-			return
-		}
+		// Read fixed header (1 byte)
+		fixedHeaderByte, err := reader.ReadByte()
 		if err != nil {
-			log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
+			if err == io.EOF {
+				log.Printf("Client %s disconnected", conn.RemoteAddr())
+			} else {
+				log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
+			}
 			return
 		}
 
-		raw := buf[:n]
-		packet, err := pkt.Parse(raw)
+		// Read Remaining Length (variable-length int, max 4 bytes)
+		remLenBuf := make([]byte, 4)
+		remLenOffset := 0
+		remainingLength := 0
+		multiplier := 1
+
+		for {
+			if remLenOffset >= len(remLenBuf) {
+				log.Printf("Remaining length too large from %s", conn.RemoteAddr())
+				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
+				return
+			}
+			b, err := reader.ReadByte()
+			if err != nil {
+				log.Printf("Error reading remaining length from %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+			remLenBuf[remLenOffset] = b
+			remLenOffset++
+			remainingLength += int(b&0x7F) * multiplier
+			multiplier *= 128
+			if (b & 0x80) == 0 {
+				break
+			}
+		}
+
+		// Allocate full packet buffer (fixed header + remaining length + variable header/payload)
+		totalPacketSize := 1 + remLenOffset + remainingLength
+		rawPacket := make([]byte, totalPacketSize)
+		rawPacket[0] = fixedHeaderByte
+		copy(rawPacket[1:1+remLenOffset], remLenBuf[:remLenOffset])
+
+		_, err = io.ReadFull(reader, rawPacket[1+remLenOffset:])
+		if err != nil {
+			log.Printf("Error reading full packet from %s: %v", conn.RemoteAddr(), err)
+			return
+		}
+
+		packet, err := pkt.Parse(rawPacket)
 		if err != nil {
 			log.Printf("Parse error from %s: %v", conn.RemoteAddr(), err)
 
 			var returnCode byte
 			switch {
-			case errors.Is(err, er.ErrUnsupportedProtocolLevel) || errors.Is(err, er.ErrUnsupportedProtocolName):
+			case errors.Is(err, er.ErrUnsupportedProtocolLevel), errors.Is(err, er.ErrUnsupportedProtocolName):
 				returnCode = pkt.UnacceptableProtocolVersion
-			case errors.Is(err, er.ErrInvalidCharsClientID) || errors.Is(err, er.ErrClientIDLengthExceed) || errors.Is(err, er.ErrIdentifierRejected):
+			case errors.Is(err, er.ErrInvalidCharsClientID), errors.Is(err, er.ErrClientIDLengthExceed), errors.Is(err, er.ErrIdentifierRejected):
 				returnCode = pkt.IdentifierRejected
-			case errors.Is(err, er.ErrPasswordWithoutUsername) || errors.Is(err, er.ErrMalformedUsernameField) || errors.Is(err, er.ErrMalformedPasswordField):
+			case errors.Is(err, er.ErrPasswordWithoutUsername), errors.Is(err, er.ErrMalformedUsernameField), errors.Is(err, er.ErrMalformedPasswordField):
 				returnCode = pkt.BadUsernameOrPassword
+			case errors.Is(err, er.ErrInvalidPacketLength):
+				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
+				return
+			default:
+				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.ServerUnavailable))
+				return
 			}
-
-			ack := pkt.NewConnAck(false, returnCode)
-			conn.Write(ack)
-			conn.Close()
-
+			srv.sendAndClose(conn, pkt.NewConnAck(false, returnCode))
 			return
 		}
 
-		// Handle first packet - must be CONNECT
 		if !sessionEstablished {
 			if !packet.IsConnect() {
-				log.Printf("Expected CONNECT packet from %s, got packet type %v", conn.RemoteAddr(), packet.Type)
-				ack := pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion)
-				conn.Write(ack)
-				conn.Close()
+				log.Printf("Expected CONNECT from %s, got %v", conn.RemoteAddr(), packet.Type)
+				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
 				return
 			}
-
 			session := packet.GetConnect()
 			if session == nil {
-				log.Printf("Failed to get CONNECT data from %s", conn.RemoteAddr())
-				ack := pkt.NewConnAck(false, pkt.ServerUnavailable)
-				conn.Write(ack)
-				conn.Close()
+				log.Printf("Invalid CONNECT packet from %s", conn.RemoteAddr())
+				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.ServerUnavailable))
 				return
 			}
 
-			// If username/password flags are true, then we do a validation over db
+			// Auth check if username/password is provided
 			if session.UsernameFlag && session.PasswordFlag {
-				err := srv.authStore.Authenticate(session.Username, session.Password)
-				if err != nil {
-					log.Printf("Failed to authenticate %s: %v", session.ClientID, err)
-					ack := pkt.NewConnAck(false, pkt.BadUsernameOrPassword)
-					conn.Write(ack)
-					conn.Close()
+				if err := srv.authStore.Authenticate(session.Username, session.Password); err != nil {
+					log.Printf("Auth failed for %s: %v", session.ClientID, err)
+					srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.BadUsernameOrPassword))
 					return
 				}
 			}
 
-			// Check if session already exists (for session present flag)
+			// Session management: Clean or resume
 			_, sessionExists := srv.broker.Get(session.ClientID)
-
-			// Determine session present flag
 			sessionPresent := false
-			if session.CleanSession && sessionExists {
-				log.Printf("Clean session requested for Client ID '%s', deleting existing session", session.ClientID)
-				srv.broker.Delete(session.ClientID)
-			}
 
-			if !session.CleanSession && sessionExists {
-				log.Printf("Restoring existing persistent session for Client ID '%s'", session.ClientID)
+			if session.CleanSession && sessionExists {
+				log.Printf("Client %s requested clean session, deleting existing", session.ClientID)
+				srv.broker.Delete(session.ClientID)
+			} else if !session.CleanSession && sessionExists {
+				log.Printf("Client %s resuming persistent session", session.ClientID)
 				sessionPresent = true
 			}
 
-			// Create/update session
-			sessionStore := &broker.Session{
+			// Store session
+			srv.broker.Store(session.ClientID, &broker.Session{
 				ClientID:     session.ClientID,
 				CleanSession: session.CleanSession,
 				KeepAlive:    session.KeepAlive,
-			}
+				Conn:         conn,
+			})
 
-			srv.broker.Store(session.ClientID, sessionStore)
-
-			// Send successful CONNACK with session present flag
-			ack := pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted)
-			conn.Write(ack)
+			// Send CONNACK
+			conn.Write(pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted))
 			sessionEstablished = true
-
 			continue
 		}
 
 		switch packet.Type {
+		case pkt.PUBLISH:
+			p := packet.Publish
+			if p == nil {
+				log.Printf("Nil PUBLISH packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received PUBLISH: Topic=%s Payload=%s QoS=%d", p.Topic, string(p.Payload), p.QoS)
+
+			if p.QoS == pkt.QoSAtLeastOnce && p.PacketID != nil {
+				puback := pkt.NewPubAck(p)
+				if _, err := conn.Write(puback.Encode()); err != nil {
+					log.Printf("Error sending PUBACK to %s: %v", conn.RemoteAddr(), err)
+					return
+				}
+				log.Printf("Sent PUBACK to %s for PacketID %d", conn.RemoteAddr(), *p.PacketID)
+			}
+
 		case pkt.SUBSCRIBE:
 			suback := pkt.NewSubAck(packet.Subscribe)
-			subackBytes := suback.Encode()
-
-			_, err = conn.Write(subackBytes)
-			if err != nil {
+			if _, err := conn.Write(suback.Encode()); err != nil {
 				log.Printf("Error sending SUBACK to %s: %v", conn.RemoteAddr(), err)
 				return
 			}
+
 		case pkt.UNSUBSCRIBE:
 			unsuback := pkt.NewUnsubAck(packet.Unsubscribe)
-			unsubackBytes := unsuback.Encode()
-
-			_, err = conn.Write(unsubackBytes)
-			if err != nil {
+			if _, err := conn.Write(unsuback.Encode()); err != nil {
 				log.Printf("Error sending UNSUBACK to %s: %v", conn.RemoteAddr(), err)
 				return
 			}
+			log.Printf("Sent UNSUBACK to %s for PacketID %d", conn.RemoteAddr(), packet.Unsubscribe.PacketID)
+
+		case pkt.PINGREQ:
+			pingresp := pkt.CreatePingresp()
+			if _, err := conn.Write(pingresp.Encode()); err != nil {
+				log.Printf("Error sending PINGRESP to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+			log.Printf("Sent PINGRESP to %s", conn.RemoteAddr())
+
 		case pkt.DISCONNECT:
 			log.Printf("Received DISCONNECT from %s", conn.RemoteAddr())
 			conn.Close()
 			return
+
+		default:
+			log.Printf("Unhandled packet type %v from %s", packet.Type, conn.RemoteAddr())
+			srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
+			return
 		}
 	}
+}
+
+// sendAndClose sends an ACK (usually CONNACK) and closes the connection
+func (srv *TCPServer) sendAndClose(conn net.Conn, ack []byte) {
+	if len(ack) > 0 {
+		if _, err := conn.Write(ack); err != nil {
+			log.Printf("Error sending ACK to %s: %v", conn.RemoteAddr(), err)
+		}
+	}
+	conn.Close()
 }
