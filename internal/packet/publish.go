@@ -162,7 +162,7 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 func parseRemainingLength(data []byte) (int, int, error) {
 	var length int
-	var multiplier int = 1
+	var multiplier int
 	var offset int
 
 	for offset < len(data) {
