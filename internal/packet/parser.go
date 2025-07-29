@@ -11,7 +11,7 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 	}
 
-	packetType := PacketType(raw[0])
+	packetType := PacketType(raw[0] & 0xF0)
 
 	result := &ParsedPacket{
 		Type: packetType,
