@@ -11,7 +11,7 @@ const (
 	PUBREC      PacketType = 0x50 // Bidirectional - Publish received
 	PUBREL      PacketType = 0x62 // Bidirectional - Publish release
 	PUBCOMP     PacketType = 0x70 // Bidirectional - Publish complete
-	SUBSCRIBE   PacketType = 0x82 // Client to Server - Subscribe request
+	SUBSCRIBE   PacketType = 0x80 // Client to Server - Subscribe request
 	SUBACK      PacketType = 0x90 // Server to Client - Subscribe acknowledgment
 	UNSUBSCRIBE PacketType = 0xA0 // Client to Server - Unsubscribe request
 	UNSUBACK    PacketType = 0xB0 // Server to Client - Unsubscribe acknowledgment
@@ -25,6 +25,7 @@ type ParsedPacket struct {
 	Raw        []byte
 	Connect    *ConnectPacket
 	Publish    *PublishPacket
+	Subscribe  *SubscribePacket
 	Disconnect *DisconnectPacket
 }
 
