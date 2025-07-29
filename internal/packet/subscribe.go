@@ -67,8 +67,8 @@ func ParseSubscribe(raw []byte) (*SubscribePacket, error) {
 	}
 	offset += 1
 
-	// MQTT 3.1.1: SUBSCRIBE must have at least 2 bytes for PacketID + topic filter
-	if remainingLength < 5 { // 2 bytes PacketID + 2 bytes topic length + 1 byte topic + 1 byte QoS
+	// MQTT 3.1.1: SUBSCRIBE must have at least 6 bytes for PacketID + topic filter
+	if remainingLength < 6 { // 2 bytes PacketID + 2 bytes topic length + 1 byte topic + 1 byte QoS
 		return nil, &er.Err{
 			Context: "Subscribe",
 			Message: er.ErrInvalidSubscribePacket,
