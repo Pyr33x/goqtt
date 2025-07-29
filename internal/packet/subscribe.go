@@ -25,6 +25,9 @@ type SubscribePacket struct {
 	Raw []byte
 }
 
+// ParseSubscribe parses and validates an MQTT SUBSCRIBE packet from the provided raw byte slice.
+// It checks the packet type, fixed header flags, remaining length, PacketID, and ensures at least one valid topic filter with a valid QoS level is present.
+// Returns a populated SubscribePacket on success, or an error if the packet is malformed or violates MQTT 3.1.1 SUBSCRIBE requirements.
 func ParseSubscribe(raw []byte) (*SubscribePacket, error) {
 	if len(raw) < 2 {
 		return nil, &er.Err{
@@ -173,6 +176,9 @@ func ParseSubscribe(raw []byte) (*SubscribePacket, error) {
 	return packet, nil
 }
 
+// validateTopicFilter checks if a topic filter string is valid according to MQTT 3.1.1 rules.
+// It ensures the string is valid UTF-8, contains no null or control characters, and uses wildcards correctly.
+// Returns an error if the topic filter is invalid.
 func validateTopicFilter(topicFilter string) error {
 	// MQTT 3.1.1: Topic filter must be valid UTF-8
 	if !utf8.ValidString(topicFilter) {
@@ -210,6 +216,8 @@ func validateTopicFilter(topicFilter string) error {
 	return nil
 }
 
+// validateWildcards checks that MQTT wildcards in a topic filter are used according to MQTT 3.1.1 rules.
+// Returns an error if multi-level (`#`) or single-level (`+`) wildcards are incorrectly positioned or not isolated within topic levels.
 func validateWildcards(topicFilter string) error {
 	runes := []rune(topicFilter)
 	length := len(runes)
