@@ -58,6 +58,12 @@ var (
 	ErrSingleLevelWildcardNotAlone    = errors.New("single-level wildcard + must be between / characters or at boundaries")
 	ErrInvalidUnsubscribePacket       = errors.New("unsubscribe packet is invalid")
 	ErrInvalidUnsubscribeFlags        = errors.New("unsubscribe fixed header flags must be 0010")
+	ErrInvalidPingreqPacket           = errors.New("pingreq packet is invalid")
+	ErrInvalidPingreqFlags            = errors.New("pingreq fixed header flags must be 0000")
+	ErrInvalidPingreqLength           = errors.New("pingreq remaining length must be 0")
+	ErrInvalidPingrespPacket          = errors.New("pingresp packet is invalid")
+	ErrInvalidPingrespFlags           = errors.New("pingresp fixed header flags must be 0000")
+	ErrInvalidPingrespLength          = errors.New("pingresp remaining length must be 0")
 )
 
 func (e *Err) Error() string {
