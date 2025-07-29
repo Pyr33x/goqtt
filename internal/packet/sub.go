@@ -46,14 +46,16 @@ func NewSubAck(subscribePacket *SubscribePacket) *SubackPacket {
 func (p *SubackPacket) Encode() []byte {
 	// Calculate remaining length: 2 bytes (PacketID) + return codes length
 	remainingLength := 2 + len(p.ReturnCodes)
+	// Validate remaining length constraint for current implementation
+	if remainingLength >= 128 {
+		// Could implement proper multi-byte encoding here
+		panic("SUBACK packet too large for current encoding implementation")
+	}
 
-	// Encode remaining length (simple case, assuming < 128)
 	var packet []byte
-
 	// Fixed header: SUBACK packet type (0x90) with reserved flags (0x00)
 	packet = append(packet, 0x90)
-
-	// Remaining length (assuming < 128 for simplicity)
+	// Remaining length (single byte encoding)
 	packet = append(packet, byte(remainingLength))
 
 	// Variable header: Packet ID
@@ -63,6 +65,5 @@ func (p *SubackPacket) Encode() []byte {
 
 	// Payload: Return codes
 	packet = append(packet, p.ReturnCodes...)
-
 	return packet
 }
