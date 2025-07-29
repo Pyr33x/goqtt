@@ -24,6 +24,7 @@ type ParsedPacket struct {
 	Type    PacketType
 	Raw     []byte
 	Connect *ConnectPacket
+	Publish *PublishPacket
 }
 
 // IsConnect returns true if this is a CONNECT packet

@@ -26,6 +26,13 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Connect = connectPacket
 		return result, nil
+	case PUBLISH:
+		publishPacket, err := ParsePublish(raw)
+		if err != nil {
+			return nil, err
+		}
+		result.Publish = publishPacket
+		return result, nil
 
 	default:
 		return nil, &er.Err{
