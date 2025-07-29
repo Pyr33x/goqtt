@@ -207,5 +207,11 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 			continue
 		}
+
+		switch packet.Type {
+		case pkt.DISCONNECT:
+			conn.Close()
+			return
+		}
 	}
 }

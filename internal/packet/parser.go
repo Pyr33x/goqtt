@@ -33,6 +33,13 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		}
 		result.Publish = publishPacket
 		return result, nil
+	case DISCONNECT:
+		disconnectPacket, err := ParseDisconnect(raw)
+		if err != nil {
+			return nil, err
+		}
+		result.Disconnect = disconnectPacket
+		return result, nil
 
 	default:
 		return nil, &er.Err{
