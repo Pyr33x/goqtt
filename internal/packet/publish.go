@@ -51,20 +51,20 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 	packet := &PublishPacket{Raw: raw}
 
 	// Parse remaining length to find where variable header starts
-	_, offset, err := parseRemainingLength(raw[1:])
+	remainingLength, offset, err := parseRemainingLength(raw[1:])
 	if err != nil {
 		return nil, err
 	}
 
 	// offset is number of bytes used for remainingLength field
 	// Total expected length = 1 (fixed header) + offset + remainingLength
-	// expectedLength := 1 + offset + remainingLength
-	// if len(raw) != expectedLength {
-	// 	return nil, &er.Err{
-	// 		Context: "Publish, Packet Length",
-	// 		Message: er.ErrInvalidPacketLength,
-	// 	}
-	// }
+	expectedLength := 1 + offset + remainingLength
+	if len(raw) != expectedLength {
+		return nil, &er.Err{
+			Context: "Publish, Packet Length",
+			Message: er.ErrInvalidPacketLength,
+		}
+	}
 	offset += 1
 
 	// Extract flags from fixed header
