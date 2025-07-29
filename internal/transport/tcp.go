@@ -209,7 +209,26 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 		}
 
 		switch packet.Type {
+		case pkt.SUBSCRIBE:
+			suback := pkt.NewSubAck(packet.Subscribe)
+			subackBytes := suback.Encode()
+
+			_, err = conn.Write(subackBytes)
+			if err != nil {
+				log.Printf("Error sending SUBACK to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+		case pkt.UNSUBSCRIBE:
+			unsuback := pkt.NewUnsubAck(packet.Unsubscribe)
+			unsubackBytes := unsuback.Encode()
+
+			_, err = conn.Write(unsubackBytes)
+			if err != nil {
+				log.Printf("Error sending UNSUBACK to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
 		case pkt.DISCONNECT:
+			log.Printf("Received DISCONNECT from %s", conn.RemoteAddr())
 			conn.Close()
 			return
 		}
