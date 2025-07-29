@@ -43,6 +43,7 @@ var (
 	ErrNullCharacterInTopic           = errors.New("null character not allowed in topic")
 	ErrInvalidUTF8Topic               = errors.New("topic must be valid UTF-8")
 	ErrControlCharacterInTopic        = errors.New("control characters not allowed in topic")
+	ErrInvalidDisconnectPacket        = errors.New("disconnect packet is invalid")
 )
 
 func (e *Err) Error() string {
