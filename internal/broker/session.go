@@ -18,7 +18,6 @@ type Session struct {
 
 	// Connection
 	KeepAlive           uint16
-	Connected           bool
 	ConnectionTimestamp int64
 	Conn                net.Conn
 }

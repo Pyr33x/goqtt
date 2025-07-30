@@ -218,6 +218,10 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				sessionPresent = true
 			}
 
+			// Send CONNACK
+			conn.Write(pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted))
+			sessionEstablished = true
+
 			// Store session
 			srv.broker.Store(session.ClientID, &broker.Session{
 				// Key Identifiers
@@ -232,14 +236,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 				// Connection
 				KeepAlive:           session.KeepAlive,
-				Connected:           true,
 				ConnectionTimestamp: connectionTimestamp,
 				Conn:                conn,
 			})
-
-			// Send CONNACK
-			conn.Write(pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted))
-			sessionEstablished = true
 			continue
 		}
 
