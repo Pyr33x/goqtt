@@ -23,10 +23,10 @@ type ConnectPacket struct {
 
 	// Payload
 	ClientID    string
-	WillTopic   string // (if Will flag is set)
-	WillMessage string // (if Will flag is set)
-	Username    string // (if Username flag is set)
-	Password    string // (if Password flag is set)
+	WillTopic   *string // (if Will flag is set)
+	WillMessage *string // (if Will flag is set)
+	Username    *string // (if Username flag is set)
+	Password    *string // (if Password flag is set)
 
 	// Raw
 	Raw []byte
@@ -176,7 +176,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 				Message: er.ErrInvalidConnPacket,
 			}
 		}
-		packet.WillTopic = string(raw[offset : offset+int(willTopicLen)])
+		packet.WillTopic = stringPtr(string(raw[offset : offset+int(willTopicLen)]))
 		offset += int(willTopicLen)
 		if offset+2 > len(raw) {
 			return nil, &er.Err{
@@ -193,7 +193,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 				Message: er.ErrInvalidConnPacket,
 			}
 		}
-		packet.WillMessage = string(raw[offset : offset+int(willMessageLen)])
+		packet.WillMessage = stringPtr(string(raw[offset : offset+int(willMessageLen)]))
 		offset += int(willMessageLen)
 	}
 
@@ -223,7 +223,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 				Message: er.ErrMalformedUsernameField,
 			}
 		}
-		packet.Username = string(raw[offset : offset+int(usernameLen)])
+		packet.Username = stringPtr(string(raw[offset : offset+int(usernameLen)]))
 		offset += int(usernameLen)
 	}
 
@@ -245,7 +245,7 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 				Message: er.ErrMalformedPasswordField,
 			}
 		}
-		packet.Password = string(raw[offset : offset+int(passwordLen)])
+		packet.Password = stringPtr(string(raw[offset : offset+int(passwordLen)]))
 	}
 
 	return packet, nil
@@ -287,4 +287,8 @@ func (c *ConnectPacket) ValidateClientID() error {
 	}
 
 	return nil
+}
+
+func stringPtr(s string) *string {
+	return &s
 }

@@ -197,7 +197,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 			// Auth check if username/password is provided
 			if session.UsernameFlag && session.PasswordFlag {
-				if err := srv.authStore.Authenticate(session.Username, session.Password); err != nil {
+				if err := srv.authStore.Authenticate(*session.Username, *session.Password); err != nil {
 					log.Printf("Auth failed for %s: %v", session.ClientID, err)
 					srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.BadUsernameOrPassword))
 					return
