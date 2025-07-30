@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"sync/atomic"
+	"time"
 
 	"github.com/pyr33x/goqtt/internal/auth"
 	"github.com/pyr33x/goqtt/internal/broker"
@@ -105,6 +106,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 	srv.currentConnections.Add(1)
 	log.Printf("Client connected from %s (connections: %d/%d)", conn.RemoteAddr(), srv.currentConnections.Load(), srv.maxConnections)
+	connectionTimestamp := time.Now().Unix()
 
 	reader := bufio.NewReader(conn)
 	sessionEstablished := false
@@ -218,10 +220,21 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 			// Store session
 			srv.broker.Store(session.ClientID, &broker.Session{
+				// Key Identifiers
 				ClientID:     session.ClientID,
 				CleanSession: session.CleanSession,
-				KeepAlive:    session.KeepAlive,
-				Conn:         conn,
+
+				// Will Flags
+				WillTopic:   *session.WillTopic,
+				WillMessage: *session.WillMessage,
+				WillQoS:     session.WillQoS,
+				WillRetain:  session.WillRetain,
+
+				// Connection
+				KeepAlive:           session.KeepAlive,
+				Connected:           true,
+				ConnectionTimestamp: connectionTimestamp,
+				Conn:                conn,
 			})
 
 			// Send CONNACK

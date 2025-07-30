@@ -6,10 +6,21 @@ import (
 )
 
 type Session struct {
+	// Key Identifiers
 	ClientID     string
 	CleanSession bool
-	KeepAlive    uint16
-	Conn         net.Conn
+
+	// Will Flags
+	WillTopic   string
+	WillMessage string
+	WillQoS     byte
+	WillRetain  bool
+
+	// Connection
+	KeepAlive           uint16
+	Connected           bool
+	ConnectionTimestamp int64
+	Conn                net.Conn
 }
 
 type sessionMap map[string]Session
