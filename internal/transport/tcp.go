@@ -229,8 +229,8 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				CleanSession: session.CleanSession,
 
 				// Will Flags
-				WillTopic:   *session.WillTopic,
-				WillMessage: *session.WillMessage,
+				WillTopic:   session.WillTopic,
+				WillMessage: session.WillMessage,
 				WillQoS:     session.WillQoS,
 				WillRetain:  session.WillRetain,
 

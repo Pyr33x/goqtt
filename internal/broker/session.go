@@ -11,8 +11,8 @@ type Session struct {
 	CleanSession bool
 
 	// Will Flags
-	WillTopic   string
-	WillMessage string
+	WillTopic   *string
+	WillMessage *string
 	WillQoS     byte
 	WillRetain  bool
 
