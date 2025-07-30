@@ -16,7 +16,7 @@ type ConnectPacket struct {
 	UsernameFlag  bool
 	PasswordFlag  bool
 	WillRetain    bool
-	WillQos       byte
+	WillQoS       byte
 	WillFlag      bool
 	CleanSession  bool
 	KeepAlive     uint16
@@ -108,12 +108,12 @@ func ParseConnect(raw []byte) (*ConnectPacket, error) {
 	packet.UsernameFlag = (connectFlags & 0x80) != 0 // bit 7
 	packet.PasswordFlag = (connectFlags & 0x40) != 0 // bit 6
 	packet.WillRetain = (connectFlags & 0x20) != 0   // bit 5
-	packet.WillQos = (connectFlags & 0x18) >> 3      // bit 4-3
+	packet.WillQoS = (connectFlags & 0x18) >> 3      // bit 4-3
 	packet.WillFlag = (connectFlags & 0x04) != 0     // bit 2
 	packet.CleanSession = (connectFlags & 0x02) != 0 // bit 1
 
 	// Validate WillQos if WillFlag is set
-	if packet.WillFlag && packet.WillQos > 2 {
+	if packet.WillFlag && packet.WillQoS > 2 {
 		return nil, &er.Err{
 			Context: "Connect, WillQos",
 			Message: er.ErrInvalidWillQos,
