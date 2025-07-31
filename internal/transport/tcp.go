@@ -7,15 +7,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync/atomic"
 	"time"
 
 	"github.com/pyr33x/goqtt/internal/auth"
 	"github.com/pyr33x/goqtt/internal/broker"
+	"github.com/pyr33x/goqtt/internal/logger"
+	er "github.com/pyr33x/goqtt/pkg/er"
+
 	pkt "github.com/pyr33x/goqtt/internal/packet"
-	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 type TCPServer struct {
@@ -26,6 +27,7 @@ type TCPServer struct {
 	maxConnections     int
 	currentConnections atomic.Int32
 	authStore          *auth.Store
+	logger             *logger.Logger
 }
 
 // New creates a new TCPServer instance
@@ -35,6 +37,7 @@ func New(addr string, db *sql.DB) *TCPServer {
 		broker:         broker.New(),
 		maxConnections: 1000,
 		authStore:      auth.NewStore(db),
+		logger:         logger.NewMQTTLogger("tcp-server"),
 	}
 }
 
@@ -62,7 +65,7 @@ func (srv *TCPServer) accept(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("shutting down accept...")
+			srv.logger.Info("shutting down accept...")
 			return
 		default:
 			conn, err := srv.listener.Accept()
@@ -70,7 +73,7 @@ func (srv *TCPServer) accept(ctx context.Context) {
 				if srv.isShuttingdown.Load() {
 					return
 				}
-				log.Println("accept error: ", err)
+				srv.logger.LogError(err, "accept error")
 				continue
 			}
 			go srv.handleConnection(conn)
@@ -100,7 +103,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			srv.broker.HandleClientDisconnect(clientID)
 		}
 
-		log.Printf("Connection from %s closed", conn.RemoteAddr())
+		srv.logger.LogClientConnection("", conn.RemoteAddr().String(), "closed")
 	}()
 
 	// Server load and shutdown checks
@@ -112,7 +115,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 	}
 
 	srv.currentConnections.Add(1)
-	log.Printf("Client connected from %s (connections: %d/%d)", conn.RemoteAddr(), srv.currentConnections.Load(), srv.maxConnections)
+	srv.logger.LogClientConnection("", conn.RemoteAddr().String(), "connected",
+		logger.Int("current_connections", int(srv.currentConnections.Load())),
+		logger.Int("max_connections", int(srv.maxConnections)))
 
 	reader := bufio.NewReader(conn)
 	sessionEstablished := false
@@ -122,9 +127,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 		fixedHeaderByte, err := reader.ReadByte()
 		if err != nil {
 			if err == io.EOF {
-				log.Printf("Client %s disconnected", conn.RemoteAddr())
+				srv.logger.LogClientConnection("", conn.RemoteAddr().String(), "disconnected")
 			} else {
-				log.Printf("Read error from %s: %v", conn.RemoteAddr(), err)
+				srv.logger.LogError(err, "Read error", logger.String("remote_addr", conn.RemoteAddr().String()))
 			}
 			return
 		}
@@ -137,13 +142,13 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 		for {
 			if remLenOffset >= len(remLenBuf) {
-				log.Printf("Remaining length too large from %s", conn.RemoteAddr())
+				srv.logger.Error("Remaining length too large", logger.String("remote_addr", conn.RemoteAddr().String()))
 				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
 				return
 			}
 			b, err := reader.ReadByte()
 			if err != nil {
-				log.Printf("Error reading remaining length from %s: %v", conn.RemoteAddr(), err)
+				srv.logger.LogError(err, "Error reading remaining length", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
 			remLenBuf[remLenOffset] = b
@@ -163,13 +168,13 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 		_, err = io.ReadFull(reader, rawPacket[1+remLenOffset:])
 		if err != nil {
-			log.Printf("Error reading full packet from %s: %v", conn.RemoteAddr(), err)
+			srv.logger.LogError(err, "Error reading full packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 			return
 		}
 
 		packet, err := pkt.Parse(rawPacket)
 		if err != nil {
-			log.Printf("Parse error from %s: %v", conn.RemoteAddr(), err)
+			srv.logger.LogError(err, "Parse error", logger.String("remote_addr", conn.RemoteAddr().String()))
 
 			var returnCode byte
 			switch {
@@ -192,13 +197,15 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 		if !sessionEstablished {
 			if !packet.IsConnect() {
-				log.Printf("Expected CONNECT from %s, got %v", conn.RemoteAddr(), packet.Type)
+				srv.logger.Error("Expected CONNECT packet",
+					logger.String("remote_addr", conn.RemoteAddr().String()),
+					logger.String("got_packet_type", packet.Type.String()))
 				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
 				return
 			}
 			session := packet.GetConnect()
 			if session == nil {
-				log.Printf("Invalid CONNECT packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Invalid CONNECT packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.ServerUnavailable))
 				return
 			}
@@ -206,7 +213,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			// Auth check if username/password is provided
 			if session.UsernameFlag && session.PasswordFlag {
 				if err := srv.authStore.Authenticate(*session.Username, *session.Password); err != nil {
-					log.Printf("Auth failed for %s: %v", session.ClientID, err)
+					srv.logger.LogAuth(session.ClientID, *session.Username, false, "authentication failed")
 					srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.BadUsernameOrPassword))
 					return
 				}
@@ -217,10 +224,10 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			sessionPresent := false
 
 			if session.CleanSession && sessionExists {
-				log.Printf("Client %s requested clean session, deleting existing", session.ClientID)
+				srv.logger.LogClientConnection(session.ClientID, conn.RemoteAddr().String(), "clean_session_requested")
 				srv.broker.Delete(session.ClientID)
 			} else if !session.CleanSession && sessionExists {
-				log.Printf("Client %s resuming persistent session", session.ClientID)
+				srv.logger.LogClientConnection(session.ClientID, conn.RemoteAddr().String(), "persistent_session_resumed")
 				sessionPresent = true
 			}
 
@@ -253,7 +260,13 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 		// Get current session for packet handling
 		currentSession, exists := srv.broker.Get(clientID)
 		if !exists {
-			log.Printf("Session not found for connection %s", conn.RemoteAddr())
+			// Check if packet type can be handled without a session
+			if packet.Type == pkt.DISCONNECT {
+				srv.logger.LogClientConnection("", conn.RemoteAddr().String(), "disconnect_without_session")
+				conn.Close()
+				return
+			}
+			srv.logger.Error("Session not found for connection", logger.String("remote_addr", conn.RemoteAddr().String()))
 			return
 		}
 
@@ -261,143 +274,163 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 		case pkt.PUBLISH:
 			p := packet.Publish
 			if p == nil {
-				log.Printf("Nil PUBLISH packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil PUBLISH packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received PUBLISH: Topic=%s Payload=%s QoS=%d", p.Topic, string(p.Payload), p.QoS)
+			srv.logger.LogPublish(currentSession.ClientID, p.Topic, int(p.QoS), p.Retain, len(p.Payload))
 
-			// Handle the publish message through the broker
-			if err := srv.broker.HandlePublish(p); err != nil {
-				log.Printf("Error handling PUBLISH from %s: %v", conn.RemoteAddr(), err)
-			}
+			// Handle different QoS levels for incoming PUBLISH
+			switch p.QoS {
+			case pkt.QoSAtMostOnce:
+				// QoS 0: Just process the message
+				if err := srv.broker.HandlePublish(p); err != nil {
+					srv.logger.LogError(err, "Error handling PUBLISH", logger.ClientID(currentSession.ClientID))
+				}
 
-			// Send acknowledgment based on QoS level
-			if p.QoS == pkt.QoSAtLeastOnce && p.PacketID != nil {
+			case pkt.QoSAtLeastOnce:
+				// QoS 1: Process and send PUBACK
+				if p.PacketID == nil {
+					srv.logger.Error("Missing PacketID for QoS 1", logger.ClientID(currentSession.ClientID))
+					return
+				}
+
+				if err := srv.broker.HandlePublish(p); err != nil {
+					srv.logger.LogError(err, "Error handling PUBLISH", logger.ClientID(currentSession.ClientID))
+				}
+
 				puback := pkt.NewPubAck(p)
 				if _, err := conn.Write(puback.Encode()); err != nil {
-					log.Printf("Error sending PUBACK to %s: %v", conn.RemoteAddr(), err)
+					srv.logger.LogError(err, "Error sending PUBACK", logger.ClientID(currentSession.ClientID))
 					return
 				}
-				log.Printf("Sent PUBACK to %s for PacketID %d", conn.RemoteAddr(), *p.PacketID)
-			} else if p.QoS == pkt.QoSExactlyOnce && p.PacketID != nil {
-				pubrec := pkt.NewPubRec(*p.PacketID)
+				srv.logger.LogQoSFlow(currentSession.ClientID, *p.PacketID, 1, "PUBACK_SENT")
+
+			case pkt.QoSExactlyOnce:
+				// QoS 2: Send PUBREC, wait for PUBREL
+				if p.PacketID == nil {
+					srv.logger.Error("Missing PacketID for QoS 2", logger.ClientID(currentSession.ClientID))
+					return
+				}
+
+				pubrec := srv.broker.HandleIncomingQoS2Publish(currentSession.ClientID, *p.PacketID, p.Topic, p.Payload, p.Retain)
 				if _, err := conn.Write(pubrec.Encode()); err != nil {
-					log.Printf("Error sending PUBREC to %s: %v", conn.RemoteAddr(), err)
+					srv.logger.LogError(err, "Error sending PUBREC", logger.ClientID(currentSession.ClientID))
 					return
 				}
-				log.Printf("Sent PUBREC to %s for PacketID %d", conn.RemoteAddr(), *p.PacketID)
+				srv.logger.LogQoSFlow(currentSession.ClientID, *p.PacketID, 2, "PUBREC_SENT")
 			}
 
 		case pkt.PUBACK:
 			if packet.Puback == nil {
-				log.Printf("Nil PUBACK packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil PUBACK packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received PUBACK from %s for PacketID %d", conn.RemoteAddr(), packet.Puback.PacketID)
-			// TODO: Remove from pending QoS 1 messages
+			srv.broker.HandlePubAck(currentSession.ClientID, packet.Puback.PacketID)
 
 		case pkt.PUBREC:
 			if packet.Pubrec == nil {
-				log.Printf("Nil PUBREC packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil PUBREC packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received PUBREC from %s for PacketID %d", conn.RemoteAddr(), packet.Pubrec.PacketID)
-			// Send PUBREL in response
-			pubrel := pkt.NewPubRel(packet.Pubrec.PacketID)
-			if _, err := conn.Write(pubrel.Encode()); err != nil {
-				log.Printf("Error sending PUBREL to %s: %v", conn.RemoteAddr(), err)
-				return
+			pubrel := srv.broker.HandlePubRec(currentSession.ClientID, packet.Pubrec.PacketID)
+			if pubrel != nil {
+				if _, err := conn.Write(pubrel.Encode()); err != nil {
+					srv.logger.LogError(err, "Error sending PUBREL", logger.ClientID(currentSession.ClientID))
+					return
+				}
+				srv.logger.LogQoSFlow(currentSession.ClientID, packet.Pubrec.PacketID, 2, "PUBREL_SENT")
 			}
-			log.Printf("Sent PUBREL to %s for PacketID %d", conn.RemoteAddr(), packet.Pubrec.PacketID)
 
 		case pkt.PUBREL:
 			if packet.Pubrel == nil {
-				log.Printf("Nil PUBREL packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil PUBREL packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received PUBREL from %s for PacketID %d", conn.RemoteAddr(), packet.Pubrel.PacketID)
-			// Send PUBCOMP in response
-			pubcomp := pkt.NewPubComp(packet.Pubrel.PacketID)
-			if _, err := conn.Write(pubcomp.Encode()); err != nil {
-				log.Printf("Error sending PUBCOMP to %s: %v", conn.RemoteAddr(), err)
-				return
+			pubcomp, err := srv.broker.HandleIncomingPubRel(currentSession.ClientID, packet.Pubrel.PacketID)
+			if err != nil {
+				srv.logger.LogError(err, "Error handling PUBREL", logger.ClientID(currentSession.ClientID))
 			}
-			log.Printf("Sent PUBCOMP to %s for PacketID %d", conn.RemoteAddr(), packet.Pubrel.PacketID)
+			if pubcomp != nil {
+				if _, err := conn.Write(pubcomp.Encode()); err != nil {
+					srv.logger.LogError(err, "Error sending PUBCOMP", logger.ClientID(currentSession.ClientID))
+					return
+				}
+				srv.logger.LogQoSFlow(currentSession.ClientID, packet.Pubrel.PacketID, 2, "PUBCOMP_SENT")
+			}
 
 		case pkt.PUBCOMP:
 			if packet.Pubcomp == nil {
-				log.Printf("Nil PUBCOMP packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil PUBCOMP packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received PUBCOMP from %s for PacketID %d", conn.RemoteAddr(), packet.Pubcomp.PacketID)
-			// TODO: Remove from pending QoS 2 messages
+			srv.broker.HandlePubComp(currentSession.ClientID, packet.Pubcomp.PacketID)
 
 		case pkt.SUBSCRIBE:
 			if packet.Subscribe == nil {
-				log.Printf("Nil SUBSCRIBE packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil SUBSCRIBE packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
 
 			// Handle subscription through broker
 			suback := srv.broker.HandleSubscribe(currentSession, packet.Subscribe)
 			if suback == nil {
-				log.Printf("Failed to handle SUBSCRIBE from %s", conn.RemoteAddr())
+				srv.logger.Error("Failed to handle SUBSCRIBE", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
 
 			// Send SUBACK response
 			if _, err := conn.Write(suback.Encode()); err != nil {
-				log.Printf("Error sending SUBACK to %s: %v", conn.RemoteAddr(), err)
+				srv.logger.LogError(err, "Error sending SUBACK", logger.ClientID(currentSession.ClientID))
 				return
 			}
-			log.Printf("Sent SUBACK to %s for PacketID %d", conn.RemoteAddr(), suback.PacketID)
+			srv.logger.LogMQTTPacket("SUBACK", currentSession.ClientID, "outbound", logger.Int("packet_id", int(suback.PacketID)))
 
 		case pkt.UNSUBSCRIBE:
 			if packet.Unsubscribe == nil {
-				log.Printf("Nil UNSUBSCRIBE packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil UNSUBSCRIBE packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
 
 			// Handle unsubscription through broker
 			unsuback := srv.broker.HandleUnsubscribe(currentSession, packet.Unsubscribe)
 			if unsuback == nil {
-				log.Printf("Failed to handle UNSUBSCRIBE from %s", conn.RemoteAddr())
+				srv.logger.Error("Failed to handle UNSUBSCRIBE", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
 
 			// Send UNSUBACK response
 			if _, err := conn.Write(unsuback.Encode()); err != nil {
-				log.Printf("Error sending UNSUBACK to %s: %v", conn.RemoteAddr(), err)
+				srv.logger.LogError(err, "Error sending UNSUBACK", logger.ClientID(currentSession.ClientID))
 				return
 			}
-			log.Printf("Sent UNSUBACK to %s for PacketID %d", conn.RemoteAddr(), unsuback.PacketID)
+			srv.logger.LogMQTTPacket("UNSUBACK", currentSession.ClientID, "outbound", logger.Int("packet_id", int(unsuback.PacketID)))
 
 		case pkt.PINGREQ:
 			pingresp := pkt.CreatePingresp()
 			if _, err := conn.Write(pingresp.Encode()); err != nil {
-				log.Printf("Error sending PINGRESP to %s: %v", conn.RemoteAddr(), err)
+				srv.logger.LogError(err, "Error sending PINGRESP", logger.ClientID(currentSession.ClientID))
 				return
 			}
-			log.Printf("Sent PINGRESP to %s", conn.RemoteAddr())
+			srv.logger.LogMQTTPacket("PINGRESP", currentSession.ClientID, "outbound")
 
 		case pkt.SUBACK:
 			if packet.Suback == nil {
-				log.Printf("Nil SUBACK packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil SUBACK packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received SUBACK from %s for PacketID %d", conn.RemoteAddr(), packet.Suback.PacketID)
+			srv.logger.LogMQTTPacket("SUBACK", currentSession.ClientID, "inbound", logger.Int("packet_id", int(packet.Suback.PacketID)))
 			// TODO: Handle subscription acknowledgment (match with pending subscriptions)
 
 		case pkt.UNSUBACK:
 			if packet.Unsuback == nil {
-				log.Printf("Nil UNSUBACK packet from %s", conn.RemoteAddr())
+				srv.logger.Error("Nil UNSUBACK packet", logger.String("remote_addr", conn.RemoteAddr().String()))
 				return
 			}
-			log.Printf("Received UNSUBACK from %s for PacketID %d", conn.RemoteAddr(), packet.Unsuback.PacketID)
+			srv.logger.LogMQTTPacket("UNSUBACK", currentSession.ClientID, "inbound", logger.Int("packet_id", int(packet.Unsuback.PacketID)))
 			// TODO: Handle unsubscription acknowledgment (match with pending unsubscriptions)
 
 		case pkt.DISCONNECT:
-			log.Printf("Received DISCONNECT from %s", conn.RemoteAddr())
+			srv.logger.LogClientConnection(currentSession.ClientID, conn.RemoteAddr().String(), "disconnect")
 
 			// Clean up subscriptions for this client
 			if currentSession != nil {
@@ -408,7 +441,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			return
 
 		default:
-			log.Printf("Unhandled packet type %v from %s", packet.Type, conn.RemoteAddr())
+			srv.logger.Error("Unhandled packet type",
+				logger.String("packet_type", packet.Type.String()),
+				logger.String("remote_addr", conn.RemoteAddr().String()))
 			srv.sendAndClose(conn, pkt.NewConnAck(false, pkt.UnacceptableProtocolVersion))
 			return
 		}
@@ -419,7 +454,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 func (srv *TCPServer) sendAndClose(conn net.Conn, ack []byte) {
 	if len(ack) > 0 {
 		if _, err := conn.Write(ack); err != nil {
-			log.Printf("Error sending ACK to %s: %v", conn.RemoteAddr(), err)
+			srv.logger.LogError(err, "Error sending ACK", logger.String("remote_addr", conn.RemoteAddr().String()))
 		}
 	}
 	conn.Close()

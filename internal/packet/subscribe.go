@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"unicode/utf8"
 
+	"github.com/pyr33x/goqtt/internal/packet/utils"
 	"github.com/pyr33x/goqtt/pkg/er"
 )
 
@@ -51,7 +52,7 @@ func (sp *SubscribePacket) Parse(raw []byte) error {
 	sp.Raw = raw
 
 	// Parse remaining length to find where variable header starts
-	remainingLength, offset, err := parseRemainingLength(raw[1:])
+	remainingLength, offset, err := utils.ParseRemainingLength(raw[1:])
 	if err != nil {
 		return err
 	}

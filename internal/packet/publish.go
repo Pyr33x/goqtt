@@ -2,8 +2,8 @@ package packet
 
 import (
 	"encoding/binary"
-	"unicode/utf8"
 
+	"github.com/pyr33x/goqtt/internal/packet/utils"
 	"github.com/pyr33x/goqtt/pkg/er"
 )
 
@@ -51,7 +51,7 @@ func (pp *PublishPacket) Parse(raw []byte) error {
 	pp.Raw = raw
 
 	// Parse remaining length to find where variable header starts
-	remainingLength, offset, err := parseRemainingLength(raw[1:])
+	remainingLength, offset, err := utils.ParseRemainingLength(raw[1:])
 	if err != nil {
 		return err
 	}
@@ -119,7 +119,7 @@ func (pp *PublishPacket) Parse(raw []byte) error {
 	offset += int(topicLen)
 
 	// MQTT 3.1.1: Topic validation
-	if err := validateTopic(pp.Topic); err != nil {
+	if err := utils.ValidateTopicName(pp.Topic); err != nil {
 		return err
 	}
 
@@ -162,88 +162,6 @@ func (pp *PublishPacket) Parse(raw []byte) error {
 	return nil
 }
 
-func parseRemainingLength(data []byte) (int, int, error) {
-	var length int
-	multiplier := 1
-	var offset int
-
-	for {
-		if offset >= len(data) {
-			return 0, 0, &er.Err{
-				Context: "Publish, Remaining Length",
-				Message: er.ErrShortBuffer,
-			}
-		}
-		if offset >= 4 {
-			return 0, 0, &er.Err{
-				Context: "Publish, Remaining Length",
-				Message: er.ErrPublishRemainingLengthExceeded,
-			}
-		}
-
-		encodedByte := data[offset]
-		length += int(encodedByte&0x7F) * multiplier
-		multiplier *= 128
-
-		offset++
-
-		if (encodedByte & 0x80) == 0 {
-			break
-		}
-	}
-
-	return length, offset, nil
-}
-
-func containsWildcards(topic string) bool {
-	for _, char := range topic {
-		if char == '+' || char == '#' {
-			return true
-		}
-	}
-	return false
-}
-
-func validateTopic(topic string) error {
-	// Check for wildcards (not allowed in PUBLISH)
-	if containsWildcards(topic) {
-		return &er.Err{
-			Context: "Publish, Topic",
-			Message: er.ErrWildcardsNotAllowedInPublish,
-		}
-	}
-
-	// MQTT 3.1.1: Topic must be valid UTF-8
-	if !utf8.ValidString(topic) {
-		return &er.Err{
-			Context: "Publish, Topic",
-			Message: er.ErrInvalidUTF8Topic,
-		}
-	}
-
-	// Check for null characters (not allowed in UTF-8 strings)
-	for _, char := range topic {
-		if char == 0 {
-			return &er.Err{
-				Context: "Publish, Topic",
-				Message: er.ErrNullCharacterInTopic,
-			}
-		}
-	}
-
-	// Check for control characters (U+0001 to U+001F and U+007F to U+009F)
-	for _, r := range topic {
-		if (r >= 0x0001 && r <= 0x001F) || (r >= 0x007F && r <= 0x009F) {
-			return &er.Err{
-				Context: "Publish, Topic",
-				Message: er.ErrControlCharacterInTopic,
-			}
-		}
-	}
-
-	return nil
-}
-
 // Encode converts the PublishPacket to bytes
 func (pp *PublishPacket) Encode() []byte {
 	if pp == nil {
@@ -278,7 +196,7 @@ func (pp *PublishPacket) Encode() []byte {
 	remainingLength += len(pp.Payload)
 
 	// Encode remaining length (supports up to 4 bytes)
-	remainingLengthBytes := encodeRemainingLength(remainingLength)
+	remainingLengthBytes := utils.EncodeRemainingLength(remainingLength)
 
 	// Build the packet
 	packet = append(packet, firstByte)
@@ -301,26 +219,4 @@ func (pp *PublishPacket) Encode() []byte {
 	packet = append(packet, pp.Payload...)
 
 	return packet
-}
-
-// encodeRemainingLength encodes the remaining length field
-func encodeRemainingLength(length int) []byte {
-	var encoded []byte
-
-	for {
-		encodedByte := byte(length % 128)
-		length = length / 128
-
-		if length > 0 {
-			encodedByte |= 128 // Set continuation bit
-		}
-
-		encoded = append(encoded, encodedByte)
-
-		if length == 0 {
-			break
-		}
-	}
-
-	return encoded
 }

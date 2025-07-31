@@ -20,6 +20,42 @@ const (
 	DISCONNECT  PacketType = 0xE0 // Client to Server - Disconnect notification
 )
 
+// String returns the string representation of the packet type
+func (pt PacketType) String() string {
+	switch pt {
+	case CONNECT:
+		return "CONNECT"
+	case CONNACK:
+		return "CONNACK"
+	case PUBLISH:
+		return "PUBLISH"
+	case PUBACK:
+		return "PUBACK"
+	case PUBREC:
+		return "PUBREC"
+	case PUBREL:
+		return "PUBREL"
+	case PUBCOMP:
+		return "PUBCOMP"
+	case SUBSCRIBE:
+		return "SUBSCRIBE"
+	case SUBACK:
+		return "SUBACK"
+	case UNSUBSCRIBE:
+		return "UNSUBSCRIBE"
+	case UNSUBACK:
+		return "UNSUBACK"
+	case PINGREQ:
+		return "PINGREQ"
+	case PINGRESP:
+		return "PINGRESP"
+	case DISCONNECT:
+		return "DISCONNECT"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 type ParsedPacket struct {
 	Type        PacketType
 	Raw         []byte

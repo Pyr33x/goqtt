@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/pyr33x/goqtt/internal/packet"
+	"github.com/pyr33x/goqtt/internal/packet/utils"
 )
 
 type SubscriptionTree struct {
@@ -36,6 +37,11 @@ func NewSubscriptionTree() *SubscriptionTree {
 
 // Subscribe adds a subscription to the tree
 func (st *SubscriptionTree) Subscribe(clientID string, session *Session, topicFilter string, qos packet.QoSLevel, handler func(string, []byte, packet.QoSLevel, bool)) error {
+	// Add validation step at the start
+	if err := utils.ValidateTopicFilter(topicFilter); err != nil {
+		return err
+	}
+
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -242,46 +248,12 @@ func (st *SubscriptionTree) getClientSubscriptions(node *TrieNode, clientID stri
 
 // IsValidTopicFilter validates a topic filter according to MQTT 3.1.1 rules
 func IsValidTopicFilter(topicFilter string) bool {
-	if topicFilter == "" {
-		return false
-	}
-
-	levels := strings.Split(topicFilter, "/")
-
-	for i, level := range levels {
-		// Check single-level wildcard rules
-		if strings.Contains(level, "+") {
-			if level != "+" {
-				return false // + must be alone in its level
-			}
-		}
-
-		// Check multi-level wildcard rules
-		if strings.Contains(level, "#") {
-			if level != "#" {
-				return false // # must be alone in its level
-			}
-			if i != len(levels)-1 {
-				return false // # must be the last level
-			}
-		}
-	}
-
-	return true
+	return utils.ValidateTopicFilter(topicFilter) == nil
 }
 
 // IsValidTopicName validates a topic name for publishing (no wildcards allowed)
 func IsValidTopicName(topicName string) bool {
-	if topicName == "" {
-		return false
-	}
-
-	// Topic names cannot contain wildcards
-	if strings.Contains(topicName, "+") || strings.Contains(topicName, "#") {
-		return false
-	}
-
-	return true
+	return utils.ValidateTopicName(topicName) == nil
 }
 
 // TopicMatches checks if a topic name matches a topic filter

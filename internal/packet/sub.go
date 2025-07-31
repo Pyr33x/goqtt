@@ -3,6 +3,7 @@ package packet
 import (
 	"encoding/binary"
 
+	"github.com/pyr33x/goqtt/internal/packet/utils"
 	"github.com/pyr33x/goqtt/pkg/er"
 )
 
@@ -53,14 +54,9 @@ func (p *SubackPacket) Encode() []byte {
 	// Fixed header: SUBACK packet type (0x90) with reserved flags (0x00)
 	packet = append(packet, 0x90)
 
-	// Encode remaining length - use simple single-byte for SUBACK (max 255 return codes)
-	if remainingLength > 127 {
-		// Multi-byte encoding for larger packets
-		packet = append(packet, byte(remainingLength%128)|0x80)
-		packet = append(packet, byte(remainingLength/128))
-	} else {
-		packet = append(packet, byte(remainingLength))
-	}
+	// Encode remaining length using shared utility
+	remainingLengthBytes := utils.EncodeRemainingLength(remainingLength)
+	packet = append(packet, remainingLengthBytes...)
 
 	// Variable header: Packet ID
 	packetIDBytes := make([]byte, 2)
@@ -82,14 +78,25 @@ func (p *SubackPacket) Parse(raw []byte) error {
 		return &er.Err{Context: "SUBACK", Message: er.ErrInvalidPacketType}
 	}
 
-	remainingLength := int(raw[1])
-	if len(raw) != 2+remainingLength {
+	remainingLength, offset, err := utils.ParseRemainingLength(raw[1:])
+	if err != nil {
+		return err
+	}
+
+	// offset is number of bytes used for remainingLength field
+	// Total expected length = 1 (fixed header) + offset + remainingLength
+	expectedLength := 1 + offset + remainingLength
+	if len(raw) != expectedLength {
 		return &er.Err{Context: "SUBACK", Message: er.ErrInvalidPacketLength}
 	}
 
-	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	// Adjust index based on the actual remaining length field size
+	packetIDIndex := 1 + offset
+	p.PacketID = binary.BigEndian.Uint16(raw[packetIDIndex : packetIDIndex+2])
+
+	returnCodesIndex := packetIDIndex + 2
 	p.ReturnCodes = make([]byte, remainingLength-2)
-	copy(p.ReturnCodes, raw[4:])
+	copy(p.ReturnCodes, raw[returnCodesIndex:])
 
 	return nil
 }
