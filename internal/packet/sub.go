@@ -2,6 +2,8 @@ package packet
 
 import (
 	"encoding/binary"
+
+	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 // SUBACK return codes
@@ -46,17 +48,19 @@ func NewSubAck(subscribePacket *SubscribePacket) *SubackPacket {
 func (p *SubackPacket) Encode() []byte {
 	// Calculate remaining length: 2 bytes (PacketID) + return codes length
 	remainingLength := 2 + len(p.ReturnCodes)
-	// Validate remaining length constraint for current implementation
-	if remainingLength >= 128 {
-		// Could implement proper multi-byte encoding here
-		panic("SUBACK packet too large for current encoding implementation")
-	}
 
 	var packet []byte
 	// Fixed header: SUBACK packet type (0x90) with reserved flags (0x00)
 	packet = append(packet, 0x90)
-	// Remaining length (single byte encoding)
-	packet = append(packet, byte(remainingLength))
+
+	// Encode remaining length - use simple single-byte for SUBACK (max 255 return codes)
+	if remainingLength > 127 {
+		// Multi-byte encoding for larger packets
+		packet = append(packet, byte(remainingLength%128)|0x80)
+		packet = append(packet, byte(remainingLength/128))
+	} else {
+		packet = append(packet, byte(remainingLength))
+	}
 
 	// Variable header: Packet ID
 	packetIDBytes := make([]byte, 2)
@@ -66,4 +70,26 @@ func (p *SubackPacket) Encode() []byte {
 	// Payload: Return codes
 	packet = append(packet, p.ReturnCodes...)
 	return packet
+}
+
+// Parse parses a SUBACK packet from raw bytes
+func (p *SubackPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "SUBACK", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != SUBACK {
+		return &er.Err{Context: "SUBACK", Message: er.ErrInvalidPacketType}
+	}
+
+	remainingLength := int(raw[1])
+	if len(raw) != 2+remainingLength {
+		return &er.Err{Context: "SUBACK", Message: er.ErrInvalidPacketLength}
+	}
+
+	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	p.ReturnCodes = make([]byte, remainingLength-2)
+	copy(p.ReturnCodes, raw[4:])
+
+	return nil
 }
