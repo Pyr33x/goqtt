@@ -90,9 +90,16 @@ func (srv *TCPServer) checkServerAvailability() string {
 }
 
 func (srv *TCPServer) handleConnection(conn net.Conn) {
+	var clientID string
 	defer func() {
 		conn.Close()
 		srv.currentConnections.Add(-1)
+
+		// Clean up subscriptions when connection closes
+		if clientID != "" {
+			srv.broker.HandleClientDisconnect(clientID)
+		}
+
 		log.Printf("Connection from %s closed", conn.RemoteAddr())
 	}()
 
@@ -222,7 +229,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			sessionEstablished = true
 
 			// Store session
-			srv.broker.Store(session.ClientID, &broker.Session{
+			brokerSession := &broker.Session{
 				// Key Identifiers
 				ClientID:     session.ClientID,
 				CleanSession: session.CleanSession,
@@ -237,8 +244,17 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				KeepAlive:           session.KeepAlive,
 				ConnectionTimestamp: time.Now().Unix(),
 				Conn:                conn,
-			})
+			}
+			srv.broker.Store(session.ClientID, brokerSession)
+			clientID = session.ClientID // Store for cleanup
 			continue
+		}
+
+		// Get current session for packet handling
+		currentSession, exists := srv.broker.Get(clientID)
+		if !exists {
+			log.Printf("Session not found for connection %s", conn.RemoteAddr())
+			return
 		}
 
 		switch packet.Type {
@@ -250,6 +266,12 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			}
 			log.Printf("Received PUBLISH: Topic=%s Payload=%s QoS=%d", p.Topic, string(p.Payload), p.QoS)
 
+			// Handle the publish message through the broker
+			if err := srv.broker.HandlePublish(p); err != nil {
+				log.Printf("Error handling PUBLISH from %s: %v", conn.RemoteAddr(), err)
+			}
+
+			// Send acknowledgment based on QoS level
 			if p.QoS == pkt.QoSAtLeastOnce && p.PacketID != nil {
 				puback := pkt.NewPubAck(p)
 				if _, err := conn.Write(puback.Encode()); err != nil {
@@ -257,22 +279,98 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 					return
 				}
 				log.Printf("Sent PUBACK to %s for PacketID %d", conn.RemoteAddr(), *p.PacketID)
+			} else if p.QoS == pkt.QoSExactlyOnce && p.PacketID != nil {
+				pubrec := pkt.NewPubRec(*p.PacketID)
+				if _, err := conn.Write(pubrec.Encode()); err != nil {
+					log.Printf("Error sending PUBREC to %s: %v", conn.RemoteAddr(), err)
+					return
+				}
+				log.Printf("Sent PUBREC to %s for PacketID %d", conn.RemoteAddr(), *p.PacketID)
 			}
 
+		case pkt.PUBACK:
+			if packet.Puback == nil {
+				log.Printf("Nil PUBACK packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received PUBACK from %s for PacketID %d", conn.RemoteAddr(), packet.Puback.PacketID)
+			// TODO: Remove from pending QoS 1 messages
+
+		case pkt.PUBREC:
+			if packet.Pubrec == nil {
+				log.Printf("Nil PUBREC packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received PUBREC from %s for PacketID %d", conn.RemoteAddr(), packet.Pubrec.PacketID)
+			// Send PUBREL in response
+			pubrel := pkt.NewPubRel(packet.Pubrec.PacketID)
+			if _, err := conn.Write(pubrel.Encode()); err != nil {
+				log.Printf("Error sending PUBREL to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+			log.Printf("Sent PUBREL to %s for PacketID %d", conn.RemoteAddr(), packet.Pubrec.PacketID)
+
+		case pkt.PUBREL:
+			if packet.Pubrel == nil {
+				log.Printf("Nil PUBREL packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received PUBREL from %s for PacketID %d", conn.RemoteAddr(), packet.Pubrel.PacketID)
+			// Send PUBCOMP in response
+			pubcomp := pkt.NewPubComp(packet.Pubrel.PacketID)
+			if _, err := conn.Write(pubcomp.Encode()); err != nil {
+				log.Printf("Error sending PUBCOMP to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+			log.Printf("Sent PUBCOMP to %s for PacketID %d", conn.RemoteAddr(), packet.Pubrel.PacketID)
+
+		case pkt.PUBCOMP:
+			if packet.Pubcomp == nil {
+				log.Printf("Nil PUBCOMP packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received PUBCOMP from %s for PacketID %d", conn.RemoteAddr(), packet.Pubcomp.PacketID)
+			// TODO: Remove from pending QoS 2 messages
+
 		case pkt.SUBSCRIBE:
-			suback := pkt.NewSubAck(packet.Subscribe)
+			if packet.Subscribe == nil {
+				log.Printf("Nil SUBSCRIBE packet from %s", conn.RemoteAddr())
+				return
+			}
+
+			// Handle subscription through broker
+			suback := srv.broker.HandleSubscribe(currentSession, packet.Subscribe)
+			if suback == nil {
+				log.Printf("Failed to handle SUBSCRIBE from %s", conn.RemoteAddr())
+				return
+			}
+
+			// Send SUBACK response
 			if _, err := conn.Write(suback.Encode()); err != nil {
 				log.Printf("Error sending SUBACK to %s: %v", conn.RemoteAddr(), err)
 				return
 			}
+			log.Printf("Sent SUBACK to %s for PacketID %d", conn.RemoteAddr(), suback.PacketID)
 
 		case pkt.UNSUBSCRIBE:
-			unsuback := pkt.NewUnsubAck(packet.Unsubscribe)
+			if packet.Unsubscribe == nil {
+				log.Printf("Nil UNSUBSCRIBE packet from %s", conn.RemoteAddr())
+				return
+			}
+
+			// Handle unsubscription through broker
+			unsuback := srv.broker.HandleUnsubscribe(currentSession, packet.Unsubscribe)
+			if unsuback == nil {
+				log.Printf("Failed to handle UNSUBSCRIBE from %s", conn.RemoteAddr())
+				return
+			}
+
+			// Send UNSUBACK response
 			if _, err := conn.Write(unsuback.Encode()); err != nil {
 				log.Printf("Error sending UNSUBACK to %s: %v", conn.RemoteAddr(), err)
 				return
 			}
-			log.Printf("Sent UNSUBACK to %s for PacketID %d", conn.RemoteAddr(), packet.Unsubscribe.PacketID)
+			log.Printf("Sent UNSUBACK to %s for PacketID %d", conn.RemoteAddr(), unsuback.PacketID)
 
 		case pkt.PINGREQ:
 			pingresp := pkt.CreatePingresp()
@@ -282,8 +380,30 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			}
 			log.Printf("Sent PINGRESP to %s", conn.RemoteAddr())
 
+		case pkt.SUBACK:
+			if packet.Suback == nil {
+				log.Printf("Nil SUBACK packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received SUBACK from %s for PacketID %d", conn.RemoteAddr(), packet.Suback.PacketID)
+			// TODO: Handle subscription acknowledgment (match with pending subscriptions)
+
+		case pkt.UNSUBACK:
+			if packet.Unsuback == nil {
+				log.Printf("Nil UNSUBACK packet from %s", conn.RemoteAddr())
+				return
+			}
+			log.Printf("Received UNSUBACK from %s for PacketID %d", conn.RemoteAddr(), packet.Unsuback.PacketID)
+			// TODO: Handle unsubscription acknowledgment (match with pending unsubscriptions)
+
 		case pkt.DISCONNECT:
 			log.Printf("Received DISCONNECT from %s", conn.RemoteAddr())
+
+			// Clean up subscriptions for this client
+			if currentSession != nil {
+				srv.broker.HandleClientDisconnect(currentSession.ClientID)
+			}
+
 			conn.Close()
 			return
 
