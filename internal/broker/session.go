@@ -37,7 +37,7 @@ func (b *Broker) Store(key string, session *Session) {
 }
 
 func (b *Broker) Get(key string) (*Session, bool) {
-	current := b.session.Load().(sessionMap)
+	current, _ := b.session.Load().(sessionMap)
 	val, ok := current[key]
 	return &val, ok
 }

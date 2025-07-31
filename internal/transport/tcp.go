@@ -283,7 +283,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			switch p.QoS {
 			case pkt.QoSAtMostOnce:
 				// QoS 0: Just process the message
-				if err := srv.broker.HandlePublish(p); err != nil {
+				if err := srv.broker.HandlePublish(currentSession.ClientID, p); err != nil {
 					srv.logger.LogError(err, "Error handling PUBLISH", logger.ClientID(currentSession.ClientID))
 				}
 
@@ -294,7 +294,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 					return
 				}
 
-				if err := srv.broker.HandlePublish(p); err != nil {
+				if err := srv.broker.HandlePublish(currentSession.ClientID, p); err != nil {
 					srv.logger.LogError(err, "Error handling PUBLISH", logger.ClientID(currentSession.ClientID))
 				}
 

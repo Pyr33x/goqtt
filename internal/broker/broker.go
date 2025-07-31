@@ -59,9 +59,12 @@ func (b *Broker) HandleSubscribe(session *Session, subscribePacket *packet.Subsc
 
 		// Create subscription handler
 		handler := func(topic string, payload []byte, qos packet.QoSLevel, retain bool) {
-			b.deliverMessage(session, topic, payload, qos, retain)
+			// Look up current session to ensure we use the latest connection
+			currentSession, _ := b.Get(session.ClientID)
+			if currentSession != nil {
+				b.deliverMessage(currentSession, topic, payload, qos, retain)
+			}
 		}
-
 		// Add subscription to the tree
 		err := b.subscriptions.Subscribe(session.ClientID, session, filter.Topic, filter.QoS, handler)
 		if err != nil {
@@ -121,7 +124,7 @@ func (b *Broker) HandleUnsubscribe(session *Session, unsubscribePacket *packet.U
 }
 
 // HandlePublish processes a PUBLISH packet and delivers it to matching subscribers
-func (b *Broker) HandlePublish(publishPacket *packet.PublishPacket) error {
+func (b *Broker) HandlePublish(clientID string, publishPacket *packet.PublishPacket) error {
 	if publishPacket == nil {
 		return fmt.Errorf("invalid publish packet")
 	}
@@ -148,7 +151,7 @@ func (b *Broker) HandlePublish(publishPacket *packet.PublishPacket) error {
 		}
 	}
 
-	b.logger.LogPublish("", publishPacket.Topic, int(publishPacket.QoS), publishPacket.Retain, len(publishPacket.Payload))
+	b.logger.LogPublish(clientID, publishPacket.Topic, int(publishPacket.QoS), publishPacket.Retain, len(publishPacket.Payload))
 	return nil
 }
 
@@ -301,13 +304,6 @@ func (b *Broker) GetClientSubscriptions(clientID string) []*Subscription {
 	return b.subscriptions.GetSubscriptions(clientID)
 }
 
-// GetSubscriptionCount returns the total number of active subscriptions
-func (b *Broker) GetSubscriptionCount() int {
-	// This would require traversing the tree to count all subscriptions
-	// Implementation depends on whether you want to maintain a counter or compute on demand
-	return 0 // Placeholder
-}
-
 // GetRetainedMessageCount returns the number of retained messages
 func (b *Broker) GetRetainedMessageCount() int {
 	b.retainedMu.RLock()
@@ -357,13 +353,14 @@ func (b *Broker) HandleIncomingPubRel(clientID string, packetID uint16) (*packet
 	if receivedMsg != nil {
 		// Process the message through the broker
 		publishPacket := &packet.PublishPacket{
-			Topic:   receivedMsg.Topic,
-			Payload: receivedMsg.Payload,
-			QoS:     packet.QoSExactlyOnce,
-			Retain:  receivedMsg.Retain,
+			Topic:    receivedMsg.Topic,
+			Payload:  receivedMsg.Payload,
+			QoS:      packet.QoSExactlyOnce,
+			Retain:   receivedMsg.Retain,
+			PacketID: &packetID,
 		}
 
-		if err := b.HandlePublish(publishPacket); err != nil {
+		if err := b.HandlePublish(clientID, publishPacket); err != nil {
 			return pubcomp, err
 		}
 	}
