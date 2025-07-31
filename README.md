@@ -12,7 +12,7 @@ GoQTT is a lightweight and high-performance MQTT 3.1.1 broker implemented in Go.
 
 ## Features
 
-- ✅ MQTT 3.1.1 compliant (⚠️ under development)
+- ✅ MQTT 3.1.1 compliant
 - ⚡ Lightweight and high-performance
 - 🔨 Modular and extensible architecture
 - ⚙️ In-memory session store
