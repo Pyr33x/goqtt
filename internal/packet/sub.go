@@ -2,6 +2,9 @@ package packet
 
 import (
 	"encoding/binary"
+
+	"github.com/pyr33x/goqtt/internal/packet/utils"
+	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 // SUBACK return codes
@@ -46,17 +49,14 @@ func NewSubAck(subscribePacket *SubscribePacket) *SubackPacket {
 func (p *SubackPacket) Encode() []byte {
 	// Calculate remaining length: 2 bytes (PacketID) + return codes length
 	remainingLength := 2 + len(p.ReturnCodes)
-	// Validate remaining length constraint for current implementation
-	if remainingLength >= 128 {
-		// Could implement proper multi-byte encoding here
-		panic("SUBACK packet too large for current encoding implementation")
-	}
 
 	var packet []byte
 	// Fixed header: SUBACK packet type (0x90) with reserved flags (0x00)
 	packet = append(packet, 0x90)
-	// Remaining length (single byte encoding)
-	packet = append(packet, byte(remainingLength))
+
+	// Encode remaining length using shared utility
+	remainingLengthBytes := utils.EncodeRemainingLength(remainingLength)
+	packet = append(packet, remainingLengthBytes...)
 
 	// Variable header: Packet ID
 	packetIDBytes := make([]byte, 2)
@@ -66,4 +66,37 @@ func (p *SubackPacket) Encode() []byte {
 	// Payload: Return codes
 	packet = append(packet, p.ReturnCodes...)
 	return packet
+}
+
+// Parse parses a SUBACK packet from raw bytes
+func (p *SubackPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "SUBACK", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != SUBACK {
+		return &er.Err{Context: "SUBACK", Message: er.ErrInvalidPacketType}
+	}
+
+	remainingLength, offset, err := utils.ParseRemainingLength(raw[1:])
+	if err != nil {
+		return err
+	}
+
+	// offset is number of bytes used for remainingLength field
+	// Total expected length = 1 (fixed header) + offset + remainingLength
+	expectedLength := 1 + offset + remainingLength
+	if len(raw) != expectedLength {
+		return &er.Err{Context: "SUBACK", Message: er.ErrInvalidPacketLength}
+	}
+
+	// Adjust index based on the actual remaining length field size
+	packetIDIndex := 1 + offset
+	p.PacketID = binary.BigEndian.Uint16(raw[packetIDIndex : packetIDIndex+2])
+
+	returnCodesIndex := packetIDIndex + 2
+	p.ReturnCodes = make([]byte, remainingLength-2)
+	copy(p.ReturnCodes, raw[returnCodesIndex:])
+
+	return nil
 }

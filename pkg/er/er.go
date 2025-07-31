@@ -64,6 +64,11 @@ var (
 	ErrInvalidPingrespPacket          = errors.New("pingresp packet is invalid")
 	ErrInvalidPingrespFlags           = errors.New("pingresp fixed header flags must be 0000")
 	ErrInvalidPingrespLength          = errors.New("pingresp remaining length must be 0")
+	ErrRemainingLengthExceeded        = errors.New("remaining length exceeds maximum of 4 bytes")
+	ErrInvalidUTF8String              = errors.New("string must be valid UTF-8")
+	ErrEmptyTopicLevel                = errors.New("empty topic level not allowed")
+	ErrInvalidSingleLevelWildcard     = errors.New("single-level wildcard + must be alone in its level")
+	ErrInvalidMultiLevelWildcard      = errors.New("multi-level wildcard # must be alone in its level")
 )
 
 func (e *Err) Error() string {

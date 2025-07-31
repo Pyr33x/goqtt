@@ -2,8 +2,8 @@ package packet
 
 import (
 	"encoding/binary"
-	"unicode/utf8"
 
+	"github.com/pyr33x/goqtt/internal/packet/utils"
 	"github.com/pyr33x/goqtt/pkg/er"
 )
 
@@ -33,34 +33,34 @@ type PublishPacket struct {
 	Raw []byte
 }
 
-func ParsePublish(raw []byte) (*PublishPacket, error) {
+func (pp *PublishPacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish",
 			Message: er.ErrInvalidPublishPacket,
 		}
 	}
 
 	if PacketType((raw[0] & 0xF0)) != PUBLISH {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish",
 			Message: er.ErrInvalidPublishPacket,
 		}
 	}
 
-	packet := &PublishPacket{Raw: raw}
+	pp.Raw = raw
 
 	// Parse remaining length to find where variable header starts
-	remainingLength, offset, err := parseRemainingLength(raw[1:])
+	remainingLength, offset, err := utils.ParseRemainingLength(raw[1:])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// offset is number of bytes used for remainingLength field
 	// Total expected length = 1 (fixed header) + offset + remainingLength
 	expectedLength := 1 + offset + remainingLength
 	if len(raw) != expectedLength {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish, Packet Length",
 			Message: er.ErrInvalidPacketLength,
 		}
@@ -69,21 +69,21 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 	// Extract flags from fixed header
 	fixedHeader := raw[0]
-	packet.DUP = (fixedHeader & 0x08) != 0
-	packet.QoS = QoSLevel((fixedHeader & 0x06) >> 1)
-	packet.Retain = (fixedHeader & 0x01) != 0
+	pp.DUP = (fixedHeader & 0x08) != 0
+	pp.QoS = QoSLevel((fixedHeader & 0x06) >> 1)
+	pp.Retain = (fixedHeader & 0x01) != 0
 
 	// Validate QoS
-	if packet.QoS > QoSExactlyOnce {
-		return nil, &er.Err{
+	if pp.QoS > QoSExactlyOnce {
+		return &er.Err{
 			Context: "Publish, QoS",
 			Message: er.ErrInvalidQoSLevel,
 		}
 	}
 
 	// MQTT 3.1.1: DUP flag validation (should be 0 for new publishes from client)
-	if packet.DUP && packet.QoS == QoSAtMostOnce {
-		return nil, &er.Err{
+	if pp.DUP && pp.QoS == QoSAtMostOnce {
+		return &er.Err{
 			Context: "Publish, DUP Flag",
 			Message: er.ErrInvalidDUPFlag,
 		}
@@ -91,7 +91,7 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 	// Parse topic name
 	if offset+2 > len(raw) {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish",
 			Message: er.ErrInvalidPublishPacket,
 		}
@@ -102,31 +102,31 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 	// MQTT 3.1.1: Topic length validation
 	if topicLen == 0 {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish, Topic",
 			Message: er.ErrEmptyTopic,
 		}
 	}
 
 	if offset+int(topicLen) > len(raw) {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish, Topic",
 			Message: er.ErrInvalidPublishPacket,
 		}
 	}
 
-	packet.Topic = string(raw[offset : offset+int(topicLen)])
+	pp.Topic = string(raw[offset : offset+int(topicLen)])
 	offset += int(topicLen)
 
 	// MQTT 3.1.1: Topic validation
-	if err := validateTopic(packet.Topic); err != nil {
-		return nil, err
+	if err := utils.ValidateTopicName(pp.Topic); err != nil {
+		return err
 	}
 
 	// Parse Packet ID (only for QoS > 0)
-	if packet.QoS != QoSAtMostOnce {
+	if pp.QoS != QoSAtMostOnce {
 		if offset+2 > len(raw) {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Publish, PacketID",
 				Message: er.ErrMissingPacketID,
 			}
@@ -134,12 +134,12 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 		packetID := binary.BigEndian.Uint16(raw[offset : offset+2])
 		if packetID == 0 {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Publish, PacketID",
 				Message: er.ErrInvalidPacketID,
 			}
 		}
-		packet.PacketID = &packetID
+		pp.PacketID = &packetID
 		offset += 2
 	}
 
@@ -149,97 +149,74 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 		// MQTT 3.1.1: Payload size validation
 		if payloadLen > MaxPayloadSize {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Publish, Payload",
 				Message: er.ErrPayloadTooLarge,
 			}
 		}
 
-		packet.Payload = make([]byte, payloadLen)
-		copy(packet.Payload, raw[offset:])
-	}
-
-	return packet, nil
-}
-
-func parseRemainingLength(data []byte) (int, int, error) {
-	var length int
-	multiplier := 1
-	var offset int
-
-	for {
-		if offset >= len(data) {
-			return 0, 0, &er.Err{
-				Context: "Publish, Remaining Length",
-				Message: er.ErrShortBuffer,
-			}
-		}
-		if offset >= 4 {
-			return 0, 0, &er.Err{
-				Context: "Publish, Remaining Length",
-				Message: er.ErrPublishRemainingLengthExceeded,
-			}
-		}
-
-		encodedByte := data[offset]
-		length += int(encodedByte&0x7F) * multiplier
-		multiplier *= 128
-
-		offset++
-
-		if (encodedByte & 0x80) == 0 {
-			break
-		}
-	}
-
-	return length, offset, nil
-}
-
-func containsWildcards(topic string) bool {
-	for _, char := range topic {
-		if char == '+' || char == '#' {
-			return true
-		}
-	}
-	return false
-}
-
-func validateTopic(topic string) error {
-	// Check for wildcards (not allowed in PUBLISH)
-	if containsWildcards(topic) {
-		return &er.Err{
-			Context: "Publish, Topic",
-			Message: er.ErrWildcardsNotAllowedInPublish,
-		}
-	}
-
-	// MQTT 3.1.1: Topic must be valid UTF-8
-	if !utf8.ValidString(topic) {
-		return &er.Err{
-			Context: "Publish, Topic",
-			Message: er.ErrInvalidUTF8Topic,
-		}
-	}
-
-	// Check for null characters (not allowed in UTF-8 strings)
-	for _, char := range topic {
-		if char == 0 {
-			return &er.Err{
-				Context: "Publish, Topic",
-				Message: er.ErrNullCharacterInTopic,
-			}
-		}
-	}
-
-	// Check for control characters (U+0001 to U+001F and U+007F to U+009F)
-	for _, r := range topic {
-		if (r >= 0x0001 && r <= 0x001F) || (r >= 0x007F && r <= 0x009F) {
-			return &er.Err{
-				Context: "Publish, Topic",
-				Message: er.ErrControlCharacterInTopic,
-			}
-		}
+		pp.Payload = make([]byte, payloadLen)
+		copy(pp.Payload, raw[offset:])
 	}
 
 	return nil
+}
+
+// Encode converts the PublishPacket to bytes
+func (pp *PublishPacket) Encode() []byte {
+	if pp == nil {
+		return nil
+	}
+
+	var packet []byte
+
+	// Fixed Header: Build the first byte
+	firstByte := byte(PUBLISH)
+	if pp.DUP {
+		firstByte |= 0x08 // Set DUP flag (bit 3)
+	}
+	// Set QoS flags (bits 2-1)
+	firstByte |= byte(pp.QoS) << 1
+	if pp.Retain {
+		firstByte |= 0x01 // Set RETAIN flag (bit 0)
+	}
+
+	// Calculate remaining length
+	remainingLength := 0
+
+	// Topic length (2 bytes) + topic string
+	remainingLength += 2 + len(pp.Topic)
+
+	// Packet ID for QoS 1 and 2
+	if pp.QoS > QoSAtMostOnce {
+		remainingLength += 2
+	}
+
+	// Payload
+	remainingLength += len(pp.Payload)
+
+	// Encode remaining length (supports up to 4 bytes)
+	remainingLengthBytes := utils.EncodeRemainingLength(remainingLength)
+
+	// Build the packet
+	packet = append(packet, firstByte)
+	packet = append(packet, remainingLengthBytes...)
+
+	// Variable Header: Topic
+	topicLengthBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(topicLengthBytes, uint16(len(pp.Topic)))
+	packet = append(packet, topicLengthBytes...)
+	packet = append(packet, []byte(pp.Topic)...)
+
+	// Variable Header: Packet ID (for QoS 1 and 2)
+	if pp.QoS > QoSAtMostOnce && pp.PacketID != nil {
+		packetIDBytes := make([]byte, 2)
+		binary.BigEndian.PutUint16(packetIDBytes, *pp.PacketID)
+		packet = append(packet, packetIDBytes...)
+	}
+
+	// Payload
+	packet = append(packet, pp.Payload...)
+
+	return packet
 }

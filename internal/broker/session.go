@@ -6,10 +6,20 @@ import (
 )
 
 type Session struct {
+	// Key Identifiers
 	ClientID     string
 	CleanSession bool
-	KeepAlive    uint16
-	Conn         net.Conn
+
+	// Will Flags
+	WillTopic   *string
+	WillMessage *string
+	WillQoS     byte
+	WillRetain  bool
+
+	// Connection
+	KeepAlive           uint16
+	ConnectionTimestamp int64
+	Conn                net.Conn
 }
 
 type sessionMap map[string]Session
@@ -27,7 +37,7 @@ func (b *Broker) Store(key string, session *Session) {
 }
 
 func (b *Broker) Get(key string) (*Session, bool) {
-	current := b.session.Load().(sessionMap)
+	current, _ := b.session.Load().(sessionMap)
 	val, ok := current[key]
 	return &val, ok
 }

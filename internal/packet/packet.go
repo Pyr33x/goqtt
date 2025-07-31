@@ -9,7 +9,7 @@ const (
 	PUBLISH     PacketType = 0x30 // Bidirectional - Publish message
 	PUBACK      PacketType = 0x40 // Bidirectional - Publish acknowledgment
 	PUBREC      PacketType = 0x50 // Bidirectional - Publish received
-	PUBREL      PacketType = 0x62 // Bidirectional - Publish release
+	PUBREL      PacketType = 0x60 // Bidirectional - Publish release
 	PUBCOMP     PacketType = 0x70 // Bidirectional - Publish complete
 	SUBSCRIBE   PacketType = 0x80 // Client to Server - Subscribe request
 	SUBACK      PacketType = 0x90 // Server to Client - Subscribe acknowledgment
@@ -20,13 +20,55 @@ const (
 	DISCONNECT  PacketType = 0xE0 // Client to Server - Disconnect notification
 )
 
+// String returns the string representation of the packet type
+func (pt PacketType) String() string {
+	switch pt {
+	case CONNECT:
+		return "CONNECT"
+	case CONNACK:
+		return "CONNACK"
+	case PUBLISH:
+		return "PUBLISH"
+	case PUBACK:
+		return "PUBACK"
+	case PUBREC:
+		return "PUBREC"
+	case PUBREL:
+		return "PUBREL"
+	case PUBCOMP:
+		return "PUBCOMP"
+	case SUBSCRIBE:
+		return "SUBSCRIBE"
+	case SUBACK:
+		return "SUBACK"
+	case UNSUBSCRIBE:
+		return "UNSUBSCRIBE"
+	case UNSUBACK:
+		return "UNSUBACK"
+	case PINGREQ:
+		return "PINGREQ"
+	case PINGRESP:
+		return "PINGRESP"
+	case DISCONNECT:
+		return "DISCONNECT"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 type ParsedPacket struct {
 	Type        PacketType
 	Raw         []byte
 	Connect     *ConnectPacket
 	Publish     *PublishPacket
+	Puback      *PubackPacket
+	Pubrec      *PubrecPacket
+	Pubrel      *PubrelPacket
+	Pubcomp     *PubcompPacket
 	Subscribe   *SubscribePacket
+	Suback      *SubackPacket
 	Unsubscribe *UnsubscribePacket
+	Unsuback    *UnsubackPacket
 	Pingreq     *PingreqPacket
 	Disconnect  *DisconnectPacket
 }

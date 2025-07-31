@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"unicode/utf8"
 
+	"github.com/pyr33x/goqtt/internal/packet/utils"
 	"github.com/pyr33x/goqtt/pkg/er"
 )
 
@@ -20,16 +21,16 @@ type UnsubscribePacket struct {
 	Raw []byte
 }
 
-func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
+func (up *UnsubscribePacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Unsubscribe",
 			Message: er.ErrInvalidUnsubscribePacket,
 		}
 	}
 
 	if PacketType((raw[0] & 0xF0)) != UNSUBSCRIBE {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Unsubscribe",
 			Message: er.ErrInvalidUnsubscribePacket,
 		}
@@ -37,25 +38,25 @@ func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
 
 	// MQTT 3.1.1: UNSUBSCRIBE fixed header flags must be 0010 (bits 3,2,1,0)
 	if (raw[0] & 0x0F) != 0x02 {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Unsubscribe, Fixed Header",
 			Message: er.ErrInvalidUnsubscribeFlags,
 		}
 	}
 
-	packet := &UnsubscribePacket{Raw: raw}
+	up.Raw = raw
 
 	// Parse remaining length to find where variable header starts
-	remainingLength, offset, err := parseRemainingLength(raw[1:])
+	remainingLength, offset, err := utils.ParseRemainingLength(raw[1:])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// offset is number of bytes used for remainingLength field
 	// Total expected length = 1 (fixed header) + offset + remainingLength
 	expectedLength := 1 + offset + remainingLength
 	if len(raw) != expectedLength {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Unsubscribe, Packet Length",
 			Message: er.ErrInvalidPacketLength,
 		}
@@ -64,7 +65,7 @@ func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
 
 	// MQTT 3.1.1: UNSUBSCRIBE must have at least 4 bytes for PacketID + topic filter
 	if remainingLength < 4 { // 2 bytes PacketID + 2 bytes topic length (minimum)
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Unsubscribe",
 			Message: er.ErrInvalidUnsubscribePacket,
 		}
@@ -72,15 +73,15 @@ func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
 
 	// Parse Packet ID (mandatory for UNSUBSCRIBE)
 	if offset+2 > len(raw) {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Unsubscribe, PacketID",
 			Message: er.ErrMissingPacketID,
 		}
 	}
 
-	packet.PacketID = binary.BigEndian.Uint16(raw[offset : offset+2])
-	if packet.PacketID == 0 {
-		return nil, &er.Err{
+	up.PacketID = binary.BigEndian.Uint16(raw[offset : offset+2])
+	if up.PacketID == 0 {
+		return &er.Err{
 			Context: "Unsubscribe, PacketID",
 			Message: er.ErrInvalidPacketID,
 		}
@@ -88,12 +89,12 @@ func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
 	offset += 2
 
 	// Parse Payload (Topic Filters) - no QoS bytes unlike SUBSCRIBE
-	packet.TopicFilters = make([]string, 0)
+	up.TopicFilters = make([]string, 0)
 
 	for offset < len(raw) {
 		// Parse topic filter length
 		if offset+2 > len(raw) {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Unsubscribe, Topic Filter",
 				Message: er.ErrInvalidUnsubscribePacket,
 			}
@@ -104,14 +105,14 @@ func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
 
 		// MQTT 3.1.1: Topic filter length validation
 		if topicLen == 0 {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Unsubscribe, Topic Filter",
 				Message: er.ErrEmptyTopicFilter,
 			}
 		}
 
 		if offset+int(topicLen) > len(raw) {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Unsubscribe, Topic Filter",
 				Message: er.ErrInvalidUnsubscribePacket,
 			}
@@ -122,21 +123,21 @@ func ParseUnsubscribe(raw []byte) (*UnsubscribePacket, error) {
 
 		// Validate topic filter
 		if err := validateUnsubscribeTopicFilter(topicFilter); err != nil {
-			return nil, err
+			return err
 		}
 
-		packet.TopicFilters = append(packet.TopicFilters, topicFilter)
+		up.TopicFilters = append(up.TopicFilters, topicFilter)
 	}
 
 	// MQTT 3.1.1: UNSUBSCRIBE must contain at least one topic filter
-	if len(packet.TopicFilters) == 0 {
-		return nil, &er.Err{
+	if len(up.TopicFilters) == 0 {
+		return &er.Err{
 			Context: "Unsubscribe",
 			Message: er.ErrNoTopicFilters,
 		}
 	}
 
-	return packet, nil
+	return nil
 }
 
 func validateUnsubscribeTopicFilter(topicFilter string) error {

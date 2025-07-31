@@ -1,8 +1,24 @@
 package packet
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/pyr33x/goqtt/pkg/er"
+)
 
 type PubackPacket struct {
+	PacketID uint16
+}
+
+type PubrecPacket struct {
+	PacketID uint16
+}
+
+type PubrelPacket struct {
+	PacketID uint16
+}
+
+type PubcompPacket struct {
 	PacketID uint16
 }
 
@@ -22,53 +38,124 @@ func CreatePuback(publishPacket *PublishPacket) *PubackPacket {
 	return NewPubAck(publishPacket)
 }
 
-// Publish received (QoS 2 publish received, part 1)
-func NewPubRec(packetID uint16) []byte {
-	return []byte{
-		byte(PUBREC),          // Packet Type (PUBREC)
-		0x02,                  // Remaining Length
-		byte(packetID >> 8),   // MSB of Packet Identifier
-		byte(packetID & 0xFF), // LSB of Packet Identifier
-	}
+// NewPubRec creates a PUBREC packet for QoS 2 flow
+func NewPubRec(packetID uint16) *PubrecPacket {
+	return &PubrecPacket{PacketID: packetID}
 }
 
-// Publish release (QoS 2 publish received, part 2)
-func NewPubRel(packetID uint16) []byte {
-	return []byte{
-		byte(PUBREL),          // Packet Type (PUBREL)
-		0x02,                  // Remaining Length
-		byte(packetID >> 8),   // MSB of Packet Identifier
-		byte(packetID & 0xFF), // LSB of Packet Identifier
-	}
+// NewPubRel creates a PUBREL packet for QoS 2 flow
+func NewPubRel(packetID uint16) *PubrelPacket {
+	return &PubrelPacket{PacketID: packetID}
 }
 
-// Publish complete (QoS 2 publish received, part 3)
-func NewPubComp(packetID uint16) []byte {
-	return []byte{
-		byte(PUBCOMP),         // Packet Type (PUBCOMP)
-		0x02,                  // Remaining Length
-		byte(packetID >> 8),   // MSB of Packet Identifier
-		byte(packetID & 0xFF), // LSB of Packet Identifier
-	}
+// NewPubComp creates a PUBCOMP packet for QoS 2 flow
+func NewPubComp(packetID uint16) *PubcompPacket {
+	return &PubcompPacket{PacketID: packetID}
 }
 
-// Encode converts the PUBACK packet to bytes
+// Parse methods for QoS flow control packets
+func (p *PubackPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "PUBACK", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != PUBACK {
+		return &er.Err{Context: "PUBACK", Message: er.ErrInvalidPacketType}
+	}
+
+	if raw[1] != 0x02 { // Remaining length must be 2
+		return &er.Err{Context: "PUBACK", Message: er.ErrInvalidPacketLength}
+	}
+
+	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	return nil
+}
+
+func (p *PubrecPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "PUBREC", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != PUBREC {
+		return &er.Err{Context: "PUBREC", Message: er.ErrInvalidPacketType}
+	}
+
+	if raw[1] != 0x02 {
+		return &er.Err{Context: "PUBREC", Message: er.ErrInvalidPacketLength}
+	}
+
+	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	return nil
+}
+
+func (p *PubrelPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "PUBREL", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != PUBREL {
+		return &er.Err{Context: "PUBREL", Message: er.ErrInvalidPacketType}
+	}
+
+	// PUBREL fixed header flags must be 0010
+	if (raw[0] & 0x0F) != 0x02 {
+		return &er.Err{Context: "PUBREL", Message: er.ErrInvalidPacketType}
+	}
+
+	if raw[1] != 0x02 {
+		return &er.Err{Context: "PUBREL", Message: er.ErrInvalidPacketLength}
+	}
+
+	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	return nil
+}
+
+func (p *PubcompPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "PUBCOMP", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != PUBCOMP {
+		return &er.Err{Context: "PUBCOMP", Message: er.ErrInvalidPacketType}
+	}
+
+	if raw[1] != 0x02 {
+		return &er.Err{Context: "PUBCOMP", Message: er.ErrInvalidPacketLength}
+	}
+
+	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	return nil
+}
+
+// Encode methods
 func (p *PubackPacket) Encode() []byte {
-	// PUBACK has fixed remaining length of 2 (just the PacketID)
-	remainingLength := 2
+	packet := make([]byte, 4)
+	packet[0] = byte(PUBACK)
+	packet[1] = 0x02
+	binary.BigEndian.PutUint16(packet[2:4], p.PacketID)
+	return packet
+}
 
-	var packet []byte
+func (p *PubrecPacket) Encode() []byte {
+	packet := make([]byte, 4)
+	packet[0] = byte(PUBREC)
+	packet[1] = 0x02
+	binary.BigEndian.PutUint16(packet[2:4], p.PacketID)
+	return packet
+}
 
-	// Fixed header: PUBACK packet type (0x40) with reserved flags (0x00)
-	packet = append(packet, 0x40)
+func (p *PubrelPacket) Encode() []byte {
+	packet := make([]byte, 4)
+	packet[0] = byte(PUBREL) | 0x02 // PUBREL requires flags 0010
+	packet[1] = 0x02
+	binary.BigEndian.PutUint16(packet[2:4], p.PacketID)
+	return packet
+}
 
-	// Remaining length (always 2 for PUBACK)
-	packet = append(packet, byte(remainingLength))
-
-	// Variable header: Packet ID
-	packetIDBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(packetIDBytes, p.PacketID)
-	packet = append(packet, packetIDBytes...)
-
+func (p *PubcompPacket) Encode() []byte {
+	packet := make([]byte, 4)
+	packet[0] = byte(PUBCOMP)
+	packet[1] = 0x02
+	binary.BigEndian.PutUint16(packet[2:4], p.PacketID)
 	return packet
 }

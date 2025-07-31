@@ -2,6 +2,8 @@ package packet
 
 import (
 	"encoding/binary"
+
+	"github.com/pyr33x/goqtt/pkg/er"
 )
 
 type UnsubackPacket struct {
@@ -13,6 +15,24 @@ func NewUnsubAck(unsubscribePacket *UnsubscribePacket) *UnsubackPacket {
 	return &UnsubackPacket{
 		PacketID: unsubscribePacket.PacketID,
 	}
+}
+
+// Parse parses an UNSUBACK packet from raw bytes
+func (p *UnsubackPacket) Parse(raw []byte) error {
+	if len(raw) < 4 {
+		return &er.Err{Context: "UNSUBACK", Message: er.ErrShortBuffer}
+	}
+
+	if PacketType(raw[0]&0xF0) != UNSUBACK {
+		return &er.Err{Context: "UNSUBACK", Message: er.ErrInvalidPacketType}
+	}
+
+	if raw[1] != 0x02 { // Remaining length must be 2
+		return &er.Err{Context: "UNSUBACK", Message: er.ErrInvalidPacketLength}
+	}
+
+	p.PacketID = binary.BigEndian.Uint16(raw[2:4])
+	return nil
 }
 
 // Encode converts the UNSUBACK packet to bytes

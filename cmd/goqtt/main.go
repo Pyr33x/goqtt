@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +11,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"gopkg.in/yaml.v3"
 
+	"github.com/pyr33x/goqtt/internal/logger"
 	"github.com/pyr33x/goqtt/internal/transport"
 )
 
@@ -30,11 +30,11 @@ func gracefulShutdown(tcpServer *transport.TCPServer, cancel context.CancelFunc,
 	defer stop()
 
 	<-ctx.Done()
-	log.Println("Graceful shutdown has triggered...")
+	logger.Info("Graceful shutdown has triggered...")
 
 	defer cancel()
 	if err := tcpServer.Stop(); err != nil {
-		log.Println(err)
+		logger.Error("Shutdown error", logger.String("error", err.Error()))
 	}
 	time.Sleep(1 * time.Second)
 
@@ -42,33 +42,36 @@ func gracefulShutdown(tcpServer *transport.TCPServer, cancel context.CancelFunc,
 }
 
 func main() {
+	// Initialize logger early
+	logger.InitGlobalLogger(logger.DevelopmentConfig())
+
 	done := make(chan struct{}, 1)
 	var cfg Config
 
 	config, err := os.ReadFile("config.yml")
 	if err != nil {
-		log.Panicln("failed to read config from yaml file")
+		logger.Fatal("failed to read config from yaml file")
 		return
 	}
 
 	err = yaml.Unmarshal([]byte(config), &cfg)
 	if err != nil {
-		log.Panicf("Failed to unmarshal yaml config: %v\n", err)
+		logger.Fatal("Failed to unmarshal yaml config", logger.String("error", err.Error()))
 	}
 
 	if _, err := os.Stat("./store"); os.IsNotExist(err) {
 		if err := os.Mkdir("./store", os.ModePerm); err != nil {
-			log.Fatalf("Failed to create store directory: %v", err)
+			logger.Fatal("Failed to create store directory", logger.String("error", err.Error()))
 		}
 	}
 
 	db, err := sql.Open("sqlite3", "./store/store.db")
 	if err != nil {
-		log.Panicf("Failed to open sqlite db: %v", err)
+		logger.Fatal("Failed to open sqlite db", logger.String("error", err.Error()))
 	}
 
 	if err := initSchema(db); err != nil {
-		log.Fatalf("Failed to initialize schema: %v", err)
+		logger.Fatal("Failed to initialize schema", logger.String("error", err.Error()))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -77,15 +80,15 @@ func main() {
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
-			log.Fatalf("server error: %v", err)
+			logger.Fatal("server error", logger.String("error", err.Error()))
 		}
 	}()
-	log.Printf("Server started listening at %s\n", cfg.Server.Port)
+	logger.Info("Server started listening", logger.String("port", cfg.Server.Port))
 
 	go gracefulShutdown(srv, cancel, done)
 
 	<-done
-	log.Println("Graceful shutdown complete.")
+	logger.Info("Graceful shutdown complete.")
 }
 
 func initSchema(db *sql.DB) error {
