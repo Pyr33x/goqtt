@@ -16,6 +16,9 @@ type Session struct {
 	WillQoS     byte
 	WillRetain  bool
 
+	// QoS
+	QoS byte
+
 	// Connection
 	KeepAlive           uint16
 	ConnectionTimestamp int64
