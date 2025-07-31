@@ -304,6 +304,11 @@ func (b *Broker) GetClientSubscriptions(clientID string) []*Subscription {
 	return b.subscriptions.GetSubscriptions(clientID)
 }
 
+// GetSubscriptionCount returns the number of subscriptions for a specific client
+func (b *Broker) GetSubscriptionCount(clientID string) int {
+	return len(b.subscriptions.GetSubscriptions(clientID))
+}
+
 // GetRetainedMessageCount returns the number of retained messages
 func (b *Broker) GetRetainedMessageCount() int {
 	b.retainedMu.RLock()

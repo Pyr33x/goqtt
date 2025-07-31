@@ -2,6 +2,7 @@ package logger
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -292,7 +293,7 @@ func (l *Logger) Error(msg string, attrs ...slog.Attr) {
 // Fatal logs a fatal message and exits
 func (l *Logger) Fatal(msg string, attrs ...slog.Attr) {
 	l.LogAttrs(context.Background(), slog.LevelError, msg, attrs...)
-	os.Exit(1)
+	panic(fmt.Sprintf("fatal error: %s", msg))
 }
 
 // With returns a new logger with the given attributes

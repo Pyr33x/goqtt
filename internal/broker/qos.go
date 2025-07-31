@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pyr33x/goqtt/internal/logger"
 	"github.com/pyr33x/goqtt/internal/packet"
 )
 
@@ -15,6 +16,7 @@ type QoSManager struct {
 	mu           sync.RWMutex
 	retryTicker  *time.Ticker
 	stopCh       chan struct{}
+	logger       *logger.Logger
 }
 
 // PendingMessage represents a message waiting for acknowledgment
@@ -333,7 +335,9 @@ func (qm *QoSManager) retryMessage(msg *PendingMessage) {
 	// Send the packet
 	data := publishPacket.Encode()
 	if data != nil {
-		msg.Session.Conn.Write(data)
+		if _, err := msg.Session.Conn.Write(data); err != nil {
+			qm.logger.LogError(err, "Failed writing data", logger.ClientID(msg.ClientID))
+		}
 	}
 }
 

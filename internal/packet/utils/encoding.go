@@ -82,24 +82,6 @@ func ParseRemainingLength(data []byte) (int, int, error) {
 	return length, offset, nil
 }
 
-// EncodeString encodes a UTF-8 string with 2-byte length prefix
-func EncodeString(s string) []byte {
-	if !utf8.ValidString(s) {
-		return nil
-	}
-
-	length := len(s)
-	if length > 65535 {
-		return nil // String too long for 2-byte length
-	}
-
-	result := make([]byte, 2+length)
-	binary.BigEndian.PutUint16(result[0:2], uint16(length))
-	copy(result[2:], []byte(s))
-
-	return result
-}
-
 // ParseString parses a UTF-8 string with 2-byte length prefix
 // Returns the string, the number of bytes consumed, and any error
 func ParseString(data []byte) (string, int, error) {
