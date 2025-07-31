@@ -19,51 +19,51 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 
 	switch packetType {
 	case CONNECT:
-		connectPacket, err := ParseConnect(raw)
-		if err != nil {
+		pkt := &ConnectPacket{}
+		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
-		result.Connect = connectPacket
+		result.Connect = pkt
 		return result, nil
 
 	case PUBLISH:
-		publishPacket, err := ParsePublish(raw)
-		if err != nil {
+		pkt := &PublishPacket{}
+		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
-		result.Publish = publishPacket
+		result.Publish = pkt
 		return result, nil
 
 	case SUBSCRIBE:
-		subscribePacket, err := ParseSubscribe(raw)
-		if err != nil {
+		pkt := &SubscribePacket{}
+		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
-		result.Subscribe = subscribePacket
+		result.Subscribe = pkt
 		return result, nil
 
 	case UNSUBSCRIBE:
-		unsubscribePacket, err := ParseUnsubscribe(raw)
-		if err != nil {
+		pkt := &UnsubscribePacket{}
+		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
-		result.Unsubscribe = unsubscribePacket
+		result.Unsubscribe = pkt
 		return result, nil
 
 	case PINGREQ:
-		pingreqPacket, err := ParsePingreq(raw)
-		if err != nil {
+		pkt := &PingreqPacket{}
+		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
-		result.Pingreq = pingreqPacket
+		result.Pingreq = pkt
 		return result, nil
 
 	case DISCONNECT:
-		disconnectPacket, err := ParseDisconnect(raw)
-		if err != nil {
+		pkt := &DisconnectPacket{}
+		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
-		result.Disconnect = disconnectPacket
+		result.Disconnect = pkt
 		return result, nil
 
 	default:

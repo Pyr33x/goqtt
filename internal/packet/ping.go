@@ -11,7 +11,7 @@ type PingreqPacket struct {
 
 type PingrespPacket struct{}
 
-func (pp *PingreqPacket) ParsePingreq(raw []byte) error {
+func (pp *PingreqPacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
 		return &er.Err{
 			Context: "Pingreq",
@@ -55,7 +55,7 @@ func (pp *PingreqPacket) ParsePingreq(raw []byte) error {
 	return nil
 }
 
-func (pp *PingrespPacket) ParsePingresp(raw []byte) error {
+func (pp *PingrespPacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
 		return &er.Err{
 			Context: "Pingresp",

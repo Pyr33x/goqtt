@@ -25,7 +25,7 @@ type SubscribePacket struct {
 	Raw []byte
 }
 
-func (sp *SubscribePacket) ParseSubscribe(raw []byte) error {
+func (sp *SubscribePacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
 		return &er.Err{
 			Context: "Subscribe",

@@ -20,7 +20,7 @@ type UnsubscribePacket struct {
 	Raw []byte
 }
 
-func (up *UnsubscribePacket) ParseUnsubscribe(raw []byte) error {
+func (up *UnsubscribePacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
 		return &er.Err{
 			Context: "Unsubscribe",

@@ -4,7 +4,7 @@ import "github.com/pyr33x/goqtt/pkg/er"
 
 type DisconnectPacket struct{}
 
-func (dp *DisconnectPacket) ParseDisconnect(raw []byte) error {
+func (dp *DisconnectPacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
 		return &er.Err{
 			Context: "Disconnect",

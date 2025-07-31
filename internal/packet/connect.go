@@ -32,7 +32,7 @@ type ConnectPacket struct {
 	Raw []byte
 }
 
-func (cp *ConnectPacket) ParseConnect(raw []byte) error {
+func (cp *ConnectPacket) Parse(raw []byte) error {
 	if len(raw) < 10 {
 		return &er.Err{
 			Context: "Connect",

@@ -33,7 +33,7 @@ type PublishPacket struct {
 	Raw []byte
 }
 
-func (pp *PublishPacket) ParsePublish(raw []byte) error {
+func (pp *PublishPacket) Parse(raw []byte) error {
 	if len(raw) < 2 {
 		return &er.Err{
 			Context: "Publish",
