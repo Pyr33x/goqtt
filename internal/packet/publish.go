@@ -243,3 +243,84 @@ func validateTopic(topic string) error {
 
 	return nil
 }
+
+// Encode converts the PublishPacket to bytes
+func (pp *PublishPacket) Encode() []byte {
+	if pp == nil {
+		return nil
+	}
+
+	var packet []byte
+
+	// Fixed Header: Build the first byte
+	firstByte := byte(PUBLISH)
+	if pp.DUP {
+		firstByte |= 0x08 // Set DUP flag (bit 3)
+	}
+	// Set QoS flags (bits 2-1)
+	firstByte |= byte(pp.QoS) << 1
+	if pp.Retain {
+		firstByte |= 0x01 // Set RETAIN flag (bit 0)
+	}
+
+	// Calculate remaining length
+	remainingLength := 0
+
+	// Topic length (2 bytes) + topic string
+	remainingLength += 2 + len(pp.Topic)
+
+	// Packet ID for QoS 1 and 2
+	if pp.QoS > QoSAtMostOnce {
+		remainingLength += 2
+	}
+
+	// Payload
+	remainingLength += len(pp.Payload)
+
+	// Encode remaining length (supports up to 4 bytes)
+	remainingLengthBytes := encodeRemainingLength(remainingLength)
+
+	// Build the packet
+	packet = append(packet, firstByte)
+	packet = append(packet, remainingLengthBytes...)
+
+	// Variable Header: Topic
+	topicLengthBytes := make([]byte, 2)
+	binary.BigEndian.PutUint16(topicLengthBytes, uint16(len(pp.Topic)))
+	packet = append(packet, topicLengthBytes...)
+	packet = append(packet, []byte(pp.Topic)...)
+
+	// Variable Header: Packet ID (for QoS 1 and 2)
+	if pp.QoS > QoSAtMostOnce && pp.PacketID != nil {
+		packetIDBytes := make([]byte, 2)
+		binary.BigEndian.PutUint16(packetIDBytes, *pp.PacketID)
+		packet = append(packet, packetIDBytes...)
+	}
+
+	// Payload
+	packet = append(packet, pp.Payload...)
+
+	return packet
+}
+
+// encodeRemainingLength encodes the remaining length field
+func encodeRemainingLength(length int) []byte {
+	var encoded []byte
+
+	for {
+		encodedByte := byte(length % 128)
+		length = length / 128
+
+		if length > 0 {
+			encodedByte |= 128 // Set continuation bit
+		}
+
+		encoded = append(encoded, encodedByte)
+
+		if length == 0 {
+			break
+		}
+	}
+
+	return encoded
+}
