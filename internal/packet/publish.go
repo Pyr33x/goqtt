@@ -33,34 +33,34 @@ type PublishPacket struct {
 	Raw []byte
 }
 
-func ParsePublish(raw []byte) (*PublishPacket, error) {
+func (pp *PublishPacket) ParsePublish(raw []byte) error {
 	if len(raw) < 2 {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish",
 			Message: er.ErrInvalidPublishPacket,
 		}
 	}
 
 	if PacketType((raw[0] & 0xF0)) != PUBLISH {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish",
 			Message: er.ErrInvalidPublishPacket,
 		}
 	}
 
-	packet := &PublishPacket{Raw: raw}
+	pp.Raw = raw
 
 	// Parse remaining length to find where variable header starts
 	remainingLength, offset, err := parseRemainingLength(raw[1:])
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// offset is number of bytes used for remainingLength field
 	// Total expected length = 1 (fixed header) + offset + remainingLength
 	expectedLength := 1 + offset + remainingLength
 	if len(raw) != expectedLength {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish, Packet Length",
 			Message: er.ErrInvalidPacketLength,
 		}
@@ -69,21 +69,21 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 	// Extract flags from fixed header
 	fixedHeader := raw[0]
-	packet.DUP = (fixedHeader & 0x08) != 0
-	packet.QoS = QoSLevel((fixedHeader & 0x06) >> 1)
-	packet.Retain = (fixedHeader & 0x01) != 0
+	pp.DUP = (fixedHeader & 0x08) != 0
+	pp.QoS = QoSLevel((fixedHeader & 0x06) >> 1)
+	pp.Retain = (fixedHeader & 0x01) != 0
 
 	// Validate QoS
-	if packet.QoS > QoSExactlyOnce {
-		return nil, &er.Err{
+	if pp.QoS > QoSExactlyOnce {
+		return &er.Err{
 			Context: "Publish, QoS",
 			Message: er.ErrInvalidQoSLevel,
 		}
 	}
 
 	// MQTT 3.1.1: DUP flag validation (should be 0 for new publishes from client)
-	if packet.DUP && packet.QoS == QoSAtMostOnce {
-		return nil, &er.Err{
+	if pp.DUP && pp.QoS == QoSAtMostOnce {
+		return &er.Err{
 			Context: "Publish, DUP Flag",
 			Message: er.ErrInvalidDUPFlag,
 		}
@@ -91,7 +91,7 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 	// Parse topic name
 	if offset+2 > len(raw) {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish",
 			Message: er.ErrInvalidPublishPacket,
 		}
@@ -102,31 +102,31 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 	// MQTT 3.1.1: Topic length validation
 	if topicLen == 0 {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish, Topic",
 			Message: er.ErrEmptyTopic,
 		}
 	}
 
 	if offset+int(topicLen) > len(raw) {
-		return nil, &er.Err{
+		return &er.Err{
 			Context: "Publish, Topic",
 			Message: er.ErrInvalidPublishPacket,
 		}
 	}
 
-	packet.Topic = string(raw[offset : offset+int(topicLen)])
+	pp.Topic = string(raw[offset : offset+int(topicLen)])
 	offset += int(topicLen)
 
 	// MQTT 3.1.1: Topic validation
-	if err := validateTopic(packet.Topic); err != nil {
-		return nil, err
+	if err := validateTopic(pp.Topic); err != nil {
+		return err
 	}
 
 	// Parse Packet ID (only for QoS > 0)
-	if packet.QoS != QoSAtMostOnce {
+	if pp.QoS != QoSAtMostOnce {
 		if offset+2 > len(raw) {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Publish, PacketID",
 				Message: er.ErrMissingPacketID,
 			}
@@ -134,12 +134,12 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 		packetID := binary.BigEndian.Uint16(raw[offset : offset+2])
 		if packetID == 0 {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Publish, PacketID",
 				Message: er.ErrInvalidPacketID,
 			}
 		}
-		packet.PacketID = &packetID
+		pp.PacketID = &packetID
 		offset += 2
 	}
 
@@ -149,17 +149,17 @@ func ParsePublish(raw []byte) (*PublishPacket, error) {
 
 		// MQTT 3.1.1: Payload size validation
 		if payloadLen > MaxPayloadSize {
-			return nil, &er.Err{
+			return &er.Err{
 				Context: "Publish, Payload",
 				Message: er.ErrPayloadTooLarge,
 			}
 		}
 
-		packet.Payload = make([]byte, payloadLen)
-		copy(packet.Payload, raw[offset:])
+		pp.Payload = make([]byte, payloadLen)
+		copy(pp.Payload, raw[offset:])
 	}
 
-	return packet, nil
+	return nil
 }
 
 func parseRemainingLength(data []byte) (int, int, error) {
