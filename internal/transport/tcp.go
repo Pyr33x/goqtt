@@ -106,7 +106,6 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 	srv.currentConnections.Add(1)
 	log.Printf("Client connected from %s (connections: %d/%d)", conn.RemoteAddr(), srv.currentConnections.Load(), srv.maxConnections)
-	connectionTimestamp := time.Now().Unix()
 
 	reader := bufio.NewReader(conn)
 	sessionEstablished := false
@@ -236,7 +235,7 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 
 				// Connection
 				KeepAlive:           session.KeepAlive,
-				ConnectionTimestamp: connectionTimestamp,
+				ConnectionTimestamp: time.Now().Unix(),
 				Conn:                conn,
 			})
 			continue
