@@ -256,7 +256,7 @@ func (l *Logger) LogRetainedMessage(topic string, action string, payloadSize int
 }
 
 // LogPerformance logs performance metrics
-func (l *Logger) LogPerformance(metric string, value interface{}, unit string, attrs ...slog.Attr) {
+func (l *Logger) LogPerformance(metric string, value any, unit string, attrs ...slog.Attr) {
 	baseAttrs := []slog.Attr{
 		slog.String("metric", metric),
 		slog.Any("value", value),
@@ -390,7 +390,7 @@ func Bool(key string, value bool) slog.Attr {
 }
 
 // Any creates an attribute with any value
-func Any(key string, value interface{}) slog.Attr {
+func Any(key string, value any) slog.Attr {
 	return slog.Any(key, value)
 }
 

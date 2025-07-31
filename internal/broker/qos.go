@@ -357,7 +357,7 @@ func (qm *QoSManager) cleanupTimedOutMessages() {
 }
 
 // GetStatistics returns QoS manager statistics
-func (qm *QoSManager) GetStatistics() map[string]interface{} {
+func (qm *QoSManager) GetStatistics() map[string]any {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
 
@@ -377,7 +377,7 @@ func (qm *QoSManager) GetStatistics() map[string]interface{} {
 		totalQoS2Received[clientID] = len(messages)
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"qos1_pending":  totalQoS1Pending,
 		"qos2_pending":  totalQoS2Pending,
 		"qos2_received": totalQoS2Received,
