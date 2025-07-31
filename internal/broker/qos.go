@@ -58,6 +58,7 @@ func NewQoSManager() *QoSManager {
 		qos2Received: make(map[string]map[uint16]*ReceivedQoS2),
 		retryTicker:  time.NewTicker(10 * time.Second), // Check for retries every 10 seconds
 		stopCh:       make(chan struct{}),
+		logger:       logger.NewMQTTLogger("qos"),
 	}
 
 	// Start retry goroutine

@@ -217,9 +217,11 @@ func hasEmptyLevels(topic string) bool {
 		}
 	}
 
-	// Check if topic starts or ends with slash creating empty levels
-	// Note: Leading slash is actually valid in MQTT, but trailing slash
-	// creates an empty level, which is valid but should be noted
+	// Check for trailing slash which creates an empty level
+	if len(topic) > 0 && topic[len(topic)-1] == '/' {
+		return true
+	}
+
 	return false
 }
 
