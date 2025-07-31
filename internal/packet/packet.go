@@ -25,8 +25,14 @@ type ParsedPacket struct {
 	Raw         []byte
 	Connect     *ConnectPacket
 	Publish     *PublishPacket
+	Puback      *PubackPacket
+	Pubrec      *PubrecPacket
+	Pubrel      *PubrelPacket
+	Pubcomp     *PubcompPacket
 	Subscribe   *SubscribePacket
+	Suback      *SubackPacket
 	Unsubscribe *UnsubscribePacket
+	Unsuback    *UnsubackPacket
 	Pingreq     *PingreqPacket
 	Disconnect  *DisconnectPacket
 }

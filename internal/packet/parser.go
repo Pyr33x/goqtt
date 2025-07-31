@@ -34,6 +34,38 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		result.Publish = pkt
 		return result, nil
 
+	case PUBACK:
+		pkt := &PubackPacket{}
+		if err := pkt.Parse(raw); err != nil {
+			return nil, err
+		}
+		result.Puback = pkt
+		return result, nil
+
+	case PUBREC:
+		pkt := &PubrecPacket{}
+		if err := pkt.Parse(raw); err != nil {
+			return nil, err
+		}
+		result.Pubrec = pkt
+		return result, nil
+
+	case PUBREL:
+		pkt := &PubrelPacket{}
+		if err := pkt.Parse(raw); err != nil {
+			return nil, err
+		}
+		result.Pubrel = pkt
+		return result, nil
+
+	case PUBCOMP:
+		pkt := &PubcompPacket{}
+		if err := pkt.Parse(raw); err != nil {
+			return nil, err
+		}
+		result.Pubcomp = pkt
+		return result, nil
+
 	case SUBSCRIBE:
 		pkt := &SubscribePacket{}
 		if err := pkt.Parse(raw); err != nil {
@@ -42,12 +74,28 @@ func Parse(raw []byte) (*ParsedPacket, error) {
 		result.Subscribe = pkt
 		return result, nil
 
+	case SUBACK:
+		pkt := &SubackPacket{}
+		if err := pkt.Parse(raw); err != nil {
+			return nil, err
+		}
+		result.Suback = pkt
+		return result, nil
+
 	case UNSUBSCRIBE:
 		pkt := &UnsubscribePacket{}
 		if err := pkt.Parse(raw); err != nil {
 			return nil, err
 		}
 		result.Unsubscribe = pkt
+		return result, nil
+
+	case UNSUBACK:
+		pkt := &UnsubackPacket{}
+		if err := pkt.Parse(raw); err != nil {
+			return nil, err
+		}
+		result.Unsuback = pkt
 		return result, nil
 
 	case PINGREQ:
