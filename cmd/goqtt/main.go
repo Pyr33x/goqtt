@@ -58,11 +58,12 @@ func main() {
 		logger.Fatal("Failed to unmarshal yaml config", logger.String("error", err.Error()))
 	}
 
-	if cfg.Server.Environment == "production" {
+	switch cfg.Server.Environment {
+	case "production":
 		logger.InitGlobalLogger(logger.ProductionConfig())
-	} else if cfg.Server.Environment == "development" {
+	case "development":
 		logger.InitGlobalLogger(logger.DevelopmentConfig())
-	} else {
+	default:
 		logger.Warn("Invalid server environment config value, assigning default.")
 		cfg.Server.Environment = "development"
 	}
