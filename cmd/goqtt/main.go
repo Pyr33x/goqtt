@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -22,7 +23,8 @@ type Config struct {
 }
 
 type Server struct {
-	Port string `yaml:"port"`
+	Port        string `yaml:"port"`
+	Environment string `yaml:"env"`
 }
 
 func gracefulShutdown(tcpServer *transport.TCPServer, cancel context.CancelFunc, done chan struct{}) {
@@ -42,11 +44,8 @@ func gracefulShutdown(tcpServer *transport.TCPServer, cancel context.CancelFunc,
 }
 
 func main() {
-	// Initialize logger early
-	logger.InitGlobalLogger(logger.DevelopmentConfig())
-
-	done := make(chan struct{}, 1)
 	var cfg Config
+	done := make(chan struct{}, 1)
 
 	config, err := os.ReadFile("config.yml")
 	if err != nil {
@@ -59,13 +58,22 @@ func main() {
 		logger.Fatal("Failed to unmarshal yaml config", logger.String("error", err.Error()))
 	}
 
+	if cfg.Server.Environment == "production" {
+		logger.InitGlobalLogger(logger.ProductionConfig())
+	} else if cfg.Server.Environment == "development" {
+		logger.InitGlobalLogger(logger.DevelopmentConfig())
+	} else {
+		logger.Warn("Invalid server environment config value, assigning default.")
+		cfg.Server.Environment = "development"
+	}
+
 	if _, err := os.Stat("./store"); os.IsNotExist(err) {
 		if err := os.Mkdir("./store", os.ModePerm); err != nil {
 			logger.Fatal("Failed to create store directory", logger.String("error", err.Error()))
 		}
 	}
 
-	db, err := sql.Open("sqlite3", "./store/store.db")
+	db, err := sql.Open("sqlite3", filepath.Join("store", "store.db"))
 	if err != nil {
 		logger.Fatal("Failed to open sqlite db", logger.String("error", err.Error()))
 	}
