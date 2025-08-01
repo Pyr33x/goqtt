@@ -64,8 +64,8 @@ func main() {
 	case "development":
 		logger.InitGlobalLogger(logger.DevelopmentConfig())
 	default:
+		logger.InitGlobalLogger(logger.DevelopmentConfig())
 		logger.Warn("Invalid server environment config value, assigning default.")
-		cfg.Server.Environment = "development"
 	}
 
 	if _, err := os.Stat("./store"); os.IsNotExist(err) {
