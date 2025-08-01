@@ -3,6 +3,12 @@ all: build start
 build:
 	@echo "🔨 Building..."
 	@go build -o ./bin/goqtt ./cmd/goqtt/main.go
+	@echo "✅ Built Successful."
+
+build-vendor:
+	@echo "🔨 Building using Vendor..."
+	@go build -mod vendor -o ./bin/goqtt ./cmd/goqtt/main.go
+	@echo "✅ Built Successful."
 
 run:
 	@echo "⚙️ Running..."
