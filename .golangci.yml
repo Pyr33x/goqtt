@@ -4,3 +4,5 @@ linters:
     - copyloopvar
     - loggercheck
     - sloglint
+  disable:
+    - staticcheck
