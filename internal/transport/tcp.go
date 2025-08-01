@@ -95,12 +95,31 @@ func (srv *TCPServer) checkServerAvailability() string {
 func (srv *TCPServer) handleConnection(conn net.Conn) {
 	var clientID string
 	defer func() {
+		if r := recover(); r != nil {
+			srv.logger.Error("panic recovered in connection handler", logger.Any("error", r))
+		}
 		conn.Close()
 		srv.currentConnections.Add(-1)
 
-		// Clean up subscriptions when connection closes
 		if clientID != "" {
-			srv.broker.HandleClientDisconnect(clientID)
+			session, ok := srv.broker.Get(clientID)
+			if ok {
+				// Will message delivery on unexpected disconnect
+				if session.WillTopic != nil && session.WillMessage != nil {
+					will := &pkt.PublishPacket{
+						Topic:   *session.WillTopic,
+						Payload: []byte(*session.WillMessage),
+						QoS:     pkt.QoSLevel(session.WillQoS),
+						Retain:  session.WillRetain,
+					}
+					srv.logger.LogPublish(clientID, *session.WillTopic, int(session.WillQoS), session.WillRetain, len(will.Payload))
+					if err := srv.broker.HandlePublish(clientID, will); err != nil {
+						srv.logger.LogError(err, "Error publishing Will message", logger.ClientID(clientID))
+					}
+				}
+
+				srv.broker.HandleClientDisconnect(clientID)
+			}
 		}
 
 		srv.logger.LogClientConnection("", conn.RemoteAddr().String(), "closed")
@@ -419,7 +438,6 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				return
 			}
 			srv.logger.LogMQTTPacket("SUBACK", currentSession.ClientID, "inbound", logger.Int("packet_id", int(packet.Suback.PacketID)))
-			// TODO: Handle subscription acknowledgment (match with pending subscriptions)
 
 		case pkt.UNSUBACK:
 			if packet.Unsuback == nil {
@@ -427,7 +445,6 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				return
 			}
 			srv.logger.LogMQTTPacket("UNSUBACK", currentSession.ClientID, "inbound", logger.Int("packet_id", int(packet.Unsuback.PacketID)))
-			// TODO: Handle unsubscription acknowledgment (match with pending unsubscriptions)
 
 		case pkt.DISCONNECT:
 			srv.logger.LogClientConnection(currentSession.ClientID, conn.RemoteAddr().String(), "disconnect")
