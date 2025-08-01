@@ -6,3 +6,8 @@ linters:
     - sloglint
   disable:
     - staticcheck
+formatters:
+  enable:
+    - gofmt
+    - gofumpt
+    - goimports
