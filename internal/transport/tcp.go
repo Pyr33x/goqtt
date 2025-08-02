@@ -98,7 +98,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 		if r := recover(); r != nil {
 			srv.logger.Error("panic recovered in connection handler", logger.Any("error", r))
 		}
-		conn.Close()
+		if err := conn.Close(); err != nil {
+			srv.logger.LogError(err, "Close error", logger.String("remote_addr", conn.RemoteAddr().String()))
+		}
 		srv.currentConnections.Add(-1)
 
 		if clientID != "" {
@@ -128,8 +130,12 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 	// Server load and shutdown checks
 	if reason := srv.checkServerAvailability(); reason != "" {
 		ack := pkt.NewConnAck(false, pkt.ServerUnavailable)
-		conn.Write(ack)
-		conn.Close()
+		if _, err := conn.Write(ack); err != nil {
+			srv.logger.LogError(err, "Write error", logger.String("remote_addr", conn.RemoteAddr().String()))
+		}
+		if err := conn.Close(); err != nil {
+			srv.logger.LogError(err, "Close error", logger.String("remote_addr", conn.RemoteAddr().String()))
+		}
 		return
 	}
 
@@ -251,7 +257,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			}
 
 			// Send CONNACK
-			conn.Write(pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted))
+			if _, err := conn.Write(pkt.NewConnAck(sessionPresent, pkt.ConnectionAccepted)); err != nil {
+				srv.logger.LogError(err, "Write error", logger.String("remote_addr", conn.RemoteAddr().String()))
+			}
 			sessionEstablished = true
 
 			// Store session
@@ -282,7 +290,9 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 			// Check if packet type can be handled without a session
 			if packet.Type == pkt.DISCONNECT {
 				srv.logger.LogClientConnection("", conn.RemoteAddr().String(), "disconnect_without_session")
-				conn.Close()
+				if err := conn.Close(); err != nil {
+					srv.logger.LogError(err, "Close error", logger.String("remote_addr", conn.RemoteAddr().String()))
+				}
 				return
 			}
 			srv.logger.Error("Session not found for connection", logger.String("remote_addr", conn.RemoteAddr().String()))
@@ -454,7 +464,10 @@ func (srv *TCPServer) handleConnection(conn net.Conn) {
 				srv.broker.HandleClientDisconnect(currentSession.ClientID)
 			}
 
-			conn.Close()
+			if err := conn.Close(); err != nil {
+				srv.logger.LogError(err, "Close error", logger.String("remote_addr", conn.RemoteAddr().String()))
+			}
+
 			return
 
 		default:
@@ -474,5 +487,7 @@ func (srv *TCPServer) sendAndClose(conn net.Conn, ack []byte) {
 			srv.logger.LogError(err, "Error sending ACK", logger.String("remote_addr", conn.RemoteAddr().String()))
 		}
 	}
-	conn.Close()
+	if err := conn.Close(); err != nil {
+		srv.logger.LogError(err, "Close error", logger.String("remote_addr", conn.RemoteAddr().String()))
+	}
 }
