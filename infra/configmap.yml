@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: goqtt-config
+  namespace: default
+data:
+  config.yml: |
+    name: "GoQTT"
+    server:
+      port: "1883"
+      env: production

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: goqtt-broker
+  namespace: default
+  labels:
+    app: goqtt-broker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: goqtt-broker
+  template:
+    metadata:
+      labels:
+        app: goqtt-broker
+    spec:
+      containers:
+        - name: goqtt
+          image: me3di/goqtt:latest
+          ports:
+            - containerPort: 1883
+              name: mqtt
+            - containerPort: 8883
+              name: mqtt-tcp
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config.yml
+              subPath: config.yml
+          env:
+            - name: CONFIG_PATH
+              value: "/config.yml"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 1883
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: config-volume
+          configMap:
+            name: goqtt-config
