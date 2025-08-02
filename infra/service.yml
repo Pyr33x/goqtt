@@ -12,9 +12,5 @@ spec:
       targetPort: 1883
       protocol: TCP
       name: mqtt
-    - port: 8883
-      targetPort: 8883
-      protocol: TCP
-      name: mqtt-tcp
   selector:
     app: goqtt-broker
