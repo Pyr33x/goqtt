@@ -14,3 +14,4 @@ spec:
       name: mqtt
   selector:
     app: goqtt-broker
+  sessionAffinity: None

@@ -6,7 +6,12 @@ metadata:
   labels:
     app: goqtt-broker
 spec:
-  replicas: 1
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
   selector:
     matchLabels:
       app: goqtt-broker
@@ -38,13 +43,18 @@ spec:
           livenessProbe:
             tcpSocket:
               port: 1883
-            initialDelaySeconds: 120
-            periodSeconds: 30
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           readinessProbe:
             tcpSocket:
               port: 1883
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+      terminationGracePeriodSeconds: 30
       volumes:
         - name: config-volume
           configMap:
