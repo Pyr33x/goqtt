@@ -11,7 +11,7 @@ A clear and concise description of what the bug is.
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Build the binary using `go build -race main cmd/goqtt/main.go`
+1. Build the binary using `go build -race main main.go`
 2. Run the binary using `./main`
 3. Send your packets from client
 4. Take a screenshot from the results of broker in terminal (or just copy)
