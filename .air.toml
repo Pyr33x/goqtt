@@ -5,7 +5,7 @@ tmp_dir = "tmp"
 [build]
 args_bin = []
 bin = "./bin/goqtt"
-cmd = "go build -o ./bin/goqtt ./cmd/goqtt/main.go"
+cmd = "go build -o ./bin/goqtt main.go"
 delay = 1000
 exclude_dir = ["assets", "tmp", "vendor", "testdata", "store", "bin"]
 exclude_file = []

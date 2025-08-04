@@ -3,7 +3,7 @@ package packet
 import (
 	"encoding/binary"
 	"errors"
-	"strings"
+	"regexp"
 
 	"github.com/google/uuid"
 	"github.com/pyr33x/goqtt/pkg/er"
@@ -275,14 +275,12 @@ func (cp *ConnectPacket) ValidateClientID() error {
 		}
 	}
 
-	// Check allowed characters: 0-9, a-z, A-Z
-	allowedChars := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	for _, char := range cp.ClientID {
-		if !strings.ContainsRune(allowedChars, char) {
-			return &er.Err{
-				Context: "Connect, ClientID",
-				Message: er.ErrInvalidCharsClientID,
-			}
+	// Allowed Pattern: UTF-8 + Symbols
+	allowdPattern := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	if !allowdPattern.MatchString(cp.ClientID) {
+		return &er.Err{
+			Context: "Connect, ClientID",
+			Message: er.ErrInvalidCharsClientID,
 		}
 	}
 
